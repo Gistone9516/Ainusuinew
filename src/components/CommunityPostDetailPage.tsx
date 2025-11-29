@@ -36,7 +36,7 @@ interface CommunityPostDetailPageProps {
   onEdit: (postId: number) => void;
 }
 
-export function CommunityPostDetailPage({ postId, onNavigate, onBack, onEdit }: CommunityPostDetailPageProps) {
+export function CommunityPostDetailPage({ postId, onNavigate: _onNavigate, onBack, onEdit }: CommunityPostDetailPageProps) {
   // Mock post data
   const [post, setPost] = useState<Post>({
     id: postId,

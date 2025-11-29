@@ -134,18 +134,6 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
     return 'text-green-600';
   };
 
-  const getIndexBg = (index: number) => {
-    if (index >= 75) return 'bg-red-50';
-    if (index >= 50) return 'bg-yellow-50';
-    return 'bg-green-50';
-  };
-
-  const getIndexStroke = (index: number) => {
-    if (index >= 75) return '#dc2626';
-    if (index >= 50) return '#ca8a04';
-    return '#16a34a';
-  };
-
   const getIndexLabel = (index: number) => {
     if (index >= 75) return '위험';
     if (index >= 50) return '주의';

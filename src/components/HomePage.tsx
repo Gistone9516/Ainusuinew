@@ -1,8 +1,6 @@
-import React from 'react';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "./ui/card";
@@ -13,13 +11,11 @@ import {
   Newspaper,
   ChevronLeft,
   ChevronRight,
-  Activity,
   BarChart3,
   ArrowUp,
-  Medal, // Added Medal icon
 } from "lucide-react";
 import type { UserData, Page } from "../App";
-import { useState } from "react";
+import { useState, type UIEvent } from "react";
 import { AppHeader } from "./AppHeader";
 import { motion } from "framer-motion";
 
@@ -65,25 +61,10 @@ export function HomePage({
     },
   ];
 
-  // Gauge data for RadialBarChart
-  const gaugeData = [
-    {
-      name: "index",
-      value: issueIndex,
-      fill: issueIndex >= 75 ? "#dc2626" : issueIndex >= 50 ? "#ca8a04" : "#16a34a",
-    },
-  ];
-
   const getIndexColor = (index: number) => {
     if (index >= 75) return "text-red-600";
     if (index >= 50) return "text-yellow-600";
     return "text-green-600";
-  };
-
-  const getIndexBg = (index: number) => {
-    if (index >= 75) return "bg-red-50";
-    if (index >= 50) return "bg-yellow-50";
-    return "bg-green-50";
   };
 
   const getIndexLabel = (index: number) => {
@@ -94,7 +75,7 @@ export function HomePage({
 
   const totalSections = 3;
 
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = (e: UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
     const scrollLeft = container.scrollLeft;
     const sectionWidth = container.offsetWidth;
