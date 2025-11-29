@@ -1,4 +1,3 @@
-import React from 'react';
 import { useState } from 'react';
 import { ArrowLeft, ThumbsUp, MessageCircle, MoreVertical, Edit, Trash2 } from 'lucide-react';
 import { Badge } from './ui/badge';
@@ -37,7 +36,7 @@ interface CommunityPostDetailPageProps {
   onEdit: (postId: number) => void;
 }
 
-export function CommunityPostDetailPage({ postId, onNavigate, onBack, onEdit }: CommunityPostDetailPageProps) {
+export function CommunityPostDetailPage({ postId, onNavigate: _onNavigate, onBack, onEdit }: CommunityPostDetailPageProps) {
   // Mock post data
   const [post, setPost] = useState<Post>({
     id: postId,
@@ -123,7 +122,7 @@ SEO 키워드: [키워드 3개]
   };
 
   const handleLikeComment = (commentId: number) => {
-    setComments(comments.map(comment => 
+    setComments(comments.map((comment: Comment) => 
       comment.id === commentId
         ? { ...comment, isLiked: !comment.isLiked, likes: comment.isLiked ? comment.likes - 1 : comment.likes + 1 }
         : comment
@@ -155,7 +154,7 @@ SEO 키워드: [키워드 3개]
   };
 
   const handleSaveEditComment = (commentId: number) => {
-    setComments(comments.map(comment =>
+    setComments(comments.map((comment: Comment) =>
       comment.id === commentId
         ? { ...comment, content: editingCommentContent }
         : comment
@@ -166,7 +165,7 @@ SEO 키워드: [키워드 3개]
 
   const handleDeleteComment = (commentId: number) => {
     if (confirm('댓글을 삭제하시겠습니까?')) {
-      setComments(comments.filter(comment => comment.id !== commentId));
+      setComments(comments.filter((comment: Comment) => comment.id !== commentId));
       setPost({ ...post, comments: post.comments - 1 });
       setShowCommentMenu(null);
     }

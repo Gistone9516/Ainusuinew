@@ -88,7 +88,7 @@ export function CommunityWritePage({ postId, onBack, onSave }: CommunityWritePag
           <Label>제목</Label>
           <Input
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
             placeholder="제목을 입력하세요"
             maxLength={100}
           />
@@ -102,7 +102,7 @@ export function CommunityWritePage({ postId, onBack, onSave }: CommunityWritePag
           <Label>내용</Label>
           <Textarea
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
             placeholder="내용을 입력하세요"
             className="min-h-[400px]"
             maxLength={5000}

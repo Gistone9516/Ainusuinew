@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -29,7 +29,7 @@ interface IssueDetailPageProps {
   onBack: () => void;
 }
 
-export function IssueDetailPage({ cluster, onNavigate, onBack }: IssueDetailPageProps) {
+export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: IssueDetailPageProps) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
 
