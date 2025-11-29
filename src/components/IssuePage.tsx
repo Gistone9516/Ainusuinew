@@ -340,7 +340,14 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                         <div className="p-3 rounded-lg bg-gray-50 text-center">
                           <div className="text-muted-foreground text-xs mb-1">평균</div>
                           <div className="text-gray-700">
-                            {Math.round((trendPeriod === '7d' ? trend7Days : trend30Days).reduce((sum, d) => sum + d.index, 0) / (trendPeriod === '7d' ? trend7Days : trend30Days).length)}
+                            {(() => {
+                              const trendData = trendPeriod === '7d' ? trend7Days : trend30Days;
+                              const sum = trendData.reduce(
+                                (total, d) => total + (typeof d.index === 'number' ? d.index : Number(d.index)), 
+                                0
+                              );
+                              return Math.round(sum / trendData.length);
+                            })()}
                           </div>
                         </div>
                         <div className="p-3 rounded-lg bg-gray-50 text-center">

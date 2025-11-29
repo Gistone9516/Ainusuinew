@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState } from 'react';
 import { ArrowLeft, ThumbsUp, MessageCircle, MoreVertical, Edit, Trash2 } from 'lucide-react';
 import { Badge } from './ui/badge';
