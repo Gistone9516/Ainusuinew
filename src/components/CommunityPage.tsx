@@ -1,9 +1,6 @@
-import React from 'react';
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Button } from './ui/button';
-import { MessageSquare, ThumbsUp, MessageCircle, Plus, PenSquare, ArrowUp } from 'lucide-react';
+import { ThumbsUp, MessageCircle, PenSquare, ArrowUp } from 'lucide-react';
 import type { UserData, Page } from '../App';
 import { AppHeader } from './AppHeader';
 

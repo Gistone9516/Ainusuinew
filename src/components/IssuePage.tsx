@@ -334,7 +334,7 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                         <div className="p-3 rounded-lg bg-gray-50 text-center">
                           <div className="text-muted-foreground text-xs mb-1">최저</div>
                           <div className="text-green-600">
-                            {Math.min(...(trendPeriod === '7d' ? trend7Days : trend30Days).map(d => d.index))}
+                            {Math.min(...(trendPeriod === '7d' ? trend7Days : trend30Days).map(d => typeof d.index === 'number' ? d.index : Number(d.index)))}
                           </div>
                         </div>
                         <div className="p-3 rounded-lg bg-gray-50 text-center">
@@ -353,7 +353,7 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                         <div className="p-3 rounded-lg bg-gray-50 text-center">
                           <div className="text-muted-foreground text-xs mb-1">최고</div>
                           <div className="text-red-600">
-                            {Math.max(...(trendPeriod === '7d' ? trend7Days : trend30Days).map(d => d.index))}
+                            {Math.max(...(trendPeriod === '7d' ? trend7Days : trend30Days).map(d => typeof d.index === 'number' ? d.index : Number(d.index)))}
                           </div>
                         </div>
                       </div>

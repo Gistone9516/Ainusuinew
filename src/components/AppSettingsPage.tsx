@@ -1,10 +1,9 @@
-import React from 'react';
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
-import { ChevronLeft, Settings, Palette, Globe, Moon } from 'lucide-react';
+import { ChevronLeft, Settings, Palette, Globe } from 'lucide-react';
 
 interface AppSettingsPageProps {
   onBack: () => void;

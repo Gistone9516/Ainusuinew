@@ -1,4 +1,3 @@
-import React from 'react';
 import { Bell, User } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -13,9 +12,6 @@ interface AppHeaderProps {
 
 export function AppHeader({ userData, onNavigate, title = 'Ainus', subtitle }: AppHeaderProps) {
   const unreadCount = 2; // Mock unread notifications count
-  
-  // Default subtitle
-  const displaySubtitle = subtitle || `안녕하세요, ${userData.username || '사용자'}님`;
 
   return (
     <div className="flex-shrink-0 flex items-center justify-between p-4 pt-6 pb-4 bg-white">
