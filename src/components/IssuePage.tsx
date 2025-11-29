@@ -1,11 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { TrendingUp, Briefcase, Newspaper, Activity, BarChart3, Clock, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Minus } from 'lucide-react';
+import { TrendingUp, Briefcase, Newspaper, Activity, BarChart3, Clock, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Minus, Loader2 } from 'lucide-react';
 import type { UserData, Page } from '../App';
 import { AppHeader } from './AppHeader';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
+import * as IssueAPI from '../lib/api/issues';
+import * as IssueHelpers from '../lib/utils/issueHelpers';
+import type {
+  CurrentIssueIndex,
+  IssueIndexHistoryItem,
+  JobIssueIndex,
+  ClusterSnapshot
+} from '../types/issue';
 
 interface IssuePageProps {
   userData: UserData;
@@ -19,6 +27,16 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
   const [currentSlide, setCurrentSlide] = useState(0);
   const [showAllClusters, setShowAllClusters] = useState(false);
   const totalSlides = 3;
+
+  // API State
+  const [currentIndex, setCurrentIndex] = useState<CurrentIssueIndex | null>(null);
+  const [historyData, setHistoryData] = useState<IssueIndexHistoryItem[]>([]);
+  const [allJobIndices, setAllJobIndices] = useState<JobIssueIndex[]>([]);
+  const [clusters, setClusters] = useState<ClusterSnapshot[]>([]);
+
+  // Loading States
+  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [isLoadingClusters, setIsLoadingClusters] = useState(false);
 
   // 스크롤 핸들러 (메인 화면 방식)
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -40,13 +58,7 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
     }
   };
 
-  // Mock data
-  const integratedIndex = 72;
-  const previousDayIndex = 69;
-  const indexChange = integratedIndex - previousDayIndex;
-  const activeClusters = 8;
-  const totalArticles = 1247;
-  
+  // Mock data (차트용 폴백 데이터)
   // 7일 추이 데이터
   const trend7Days = [
     { date: '11/18', index: 65, clusters: 6 },
@@ -145,6 +157,134 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
     if (trend === 'down') return <ArrowDown className="h-5 w-5" />;
     return <Minus className="h-5 w-5" />;
   };
+
+  // ==================== API 호출 함수 ====================
+
+  // 현재 이슈 지수 조회
+  const fetchCurrentIndex = async () => {
+    try {
+      const response = await IssueAPI.getCurrentIssueIndex();
+      setCurrentIndex(response.data);
+
+      // 현재 지수 로드 후 클러스터도 자동 로드
+      if (response.data.collected_at) {
+        fetchClusters(response.data.collected_at);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch current index:', err);
+    }
+  };
+
+  // 히스토리 데이터 조회
+  const fetchHistoryData = async (range: '7d' | '30d') => {
+    try {
+      const days = range === '7d' ? 7 : 30;
+      const data = await IssueAPI.getRecentIssueIndices(days);
+      setHistoryData(data);
+    } catch (err: any) {
+      console.error('Failed to fetch history:', err);
+    }
+  };
+
+  // 직업별 지수 조회
+  const fetchAllJobIndices = async () => {
+    setIsLoadingJobs(true);
+    try {
+      const response = await IssueAPI.getAllJobIndices();
+      setAllJobIndices(response.jobs);
+    } catch (err: any) {
+      console.error('Failed to fetch job indices:', err);
+    } finally {
+      setIsLoadingJobs(false);
+    }
+  };
+
+  // 클러스터 조회
+  const fetchClusters = async (collectedAt: string) => {
+    setIsLoadingClusters(true);
+    try {
+      const response = await IssueAPI.getClusterSnapshot(collectedAt);
+      setClusters(response.data);
+    } catch (err: any) {
+      console.error('Failed to fetch clusters:', err);
+    } finally {
+      setIsLoadingClusters(false);
+    }
+  };
+
+  // ==================== useEffect Hooks ====================
+
+  // 컴포넌트 마운트 시 현재 지수와 히스토리 로드
+  useEffect(() => {
+    fetchCurrentIndex();
+    fetchHistoryData('7d');
+  }, []);
+
+  // 시간 범위 변경 시 히스토리 재로드
+  useEffect(() => {
+    fetchHistoryData(trendPeriod);
+  }, [trendPeriod]);
+
+  // 직업별 지수 탭 선택 시 로드
+  useEffect(() => {
+    if (selectedTab === 'byjob' && allJobIndices.length === 0) {
+      fetchAllJobIndices();
+    }
+  }, [selectedTab]);
+
+  // ==================== Computed Values ====================
+
+  // 차트 데이터 변환
+  const chartData = useMemo(() => {
+    if (historyData.length === 0) return [];
+    return historyData.map((item) => ({
+      date: IssueHelpers.formatShortDate(item.collected_at),
+      index: item.overall_index,
+      clusters: item.active_clusters_count,
+    }));
+  }, [historyData]);
+
+  // 24시간 데이터 (최근 데이터에서 필터링)
+  const hourlyChartData = useMemo(() => {
+    const last24Hours = IssueHelpers.filter24HoursData(historyData);
+    return last24Hours.map((item) => ({
+      hour: IssueHelpers.formatTime(item.collected_at),
+      index: item.overall_index,
+    }));
+  }, [historyData]);
+
+  // 실제 데이터와 Mock 데이터 병합
+  const integratedIndex = currentIndex?.overall_index ?? 72;
+  const previousDayIndex = historyData.length > 1 ? historyData[historyData.length - 2]?.overall_index : 69;
+  const indexChange = integratedIndex - previousDayIndex;
+  const activeClusters = currentIndex?.active_clusters_count ?? 8;
+  const totalArticles = currentIndex?.total_articles_analyzed ?? 1247;
+
+  // 차트에 사용할 데이터 (실제 데이터가 있으면 사용, 없으면 Mock)
+  const trendData = chartData.length > 0 ? chartData : (trendPeriod === '7d' ? trend7Days : trend30Days);
+  const hourlyDisplayData = hourlyChartData.length > 0 ? hourlyChartData : hourlyData;
+
+  // 직업별 지수 (실제 데이터가 있으면 사용, 없으면 Mock)
+  const jobDisplayData = allJobIndices.length > 0
+    ? allJobIndices.map((job) => ({
+        job: job.job_category,
+        index: job.issue_index,
+        trend: 'stable' as const,
+        change: 0,
+      }))
+    : jobIndexes;
+
+  // 뉴스 클러스터 (실제 데이터가 있으면 사용, 없으면 Mock)
+  const newsDisplayData = clusters.length > 0
+    ? clusters.map((cluster) => ({
+        title: cluster.topic_name,
+        tags: cluster.tags,
+        score: cluster.cluster_score,
+        articles: cluster.article_count,
+        createdAt: IssueHelpers.formatDate(cluster.appearance_count.toString()),
+        updatedAt: IssueHelpers.formatDate(cluster.appearance_count.toString()),
+      }))
+    : newsClusters;
 
   return (
     <div className="min-h-screen pb-20 bg-gray-50">
@@ -279,8 +419,8 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                       </div>
 
                       <ResponsiveContainer width="100%" height={280}>
-                        <AreaChart 
-                          data={trendPeriod === '7d' ? trend7Days : trend30Days}
+                        <AreaChart
+                          data={trendData}
                           margin={{ top: 5, right: 5, left: -30, bottom: 5 }}
                         >
                           <defs>
@@ -322,26 +462,19 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                         <div className="p-3 rounded-lg bg-gray-50 text-center">
                           <div className="text-muted-foreground text-xs mb-1">최저</div>
                           <div className="text-green-600">
-                            {Math.min(...(trendPeriod === '7d' ? trend7Days : trend30Days).map(d => typeof d.index === 'number' ? d.index : Number(d.index)))}
+                            {trendData.length > 0 ? Math.min(...trendData.map(d => typeof d.index === 'number' ? d.index : Number(d.index))) : '-'}
                           </div>
                         </div>
                         <div className="p-3 rounded-lg bg-gray-50 text-center">
                           <div className="text-muted-foreground text-xs mb-1">평균</div>
                           <div className="text-gray-700">
-                            {(() => {
-                              const trendData = trendPeriod === '7d' ? trend7Days : trend30Days;
-                              const sum = trendData.reduce(
-                                (total, d) => total + (typeof d.index === 'number' ? d.index : Number(d.index)), 
-                                0
-                              );
-                              return Math.round(sum / trendData.length);
-                            })()}
+                            {trendData.length > 0 ? Math.round(trendData.reduce((total, d) => total + (typeof d.index === 'number' ? d.index : Number(d.index)), 0) / trendData.length) : '-'}
                           </div>
                         </div>
                         <div className="p-3 rounded-lg bg-gray-50 text-center">
                           <div className="text-muted-foreground text-xs mb-1">최고</div>
                           <div className="text-red-600">
-                            {Math.max(...(trendPeriod === '7d' ? trend7Days : trend30Days).map(d => typeof d.index === 'number' ? d.index : Number(d.index)))}
+                            {trendData.length > 0 ? Math.max(...trendData.map(d => typeof d.index === 'number' ? d.index : Number(d.index))) : '-'}
                           </div>
                         </div>
                       </div>
@@ -357,8 +490,8 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                       </div>
 
                       <ResponsiveContainer width="100%" height={280}>
-                        <BarChart 
-                          data={hourlyData}
+                        <BarChart
+                          data={hourlyDisplayData}
                           margin={{ top: 5, right: 5, left: -30, bottom: 5 }}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -451,12 +584,17 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                 <h2 className="text-base sm:text-lg">직업별 AI 이슈 지수</h2>
               </div>
               
-              <div className="space-y-3">
-                {jobIndexes.map((item) => (
-                  <div
-                    key={item.job}
-                    className="flex items-center justify-between p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
+              {isLoadingJobs ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {jobDisplayData.map((item) => (
+                    <div
+                      key={item.job}
+                      className="flex items-center justify-between p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+                    >
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span>{item.job}</span>
@@ -484,7 +622,8 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>
@@ -497,13 +636,19 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
               <h2 className="text-base sm:text-lg">주요 이슈 뉴스</h2>
             </div>
             <Badge variant="outline" className="text-xs">
-              {showAllClusters ? `전체 ${newsClusters.length}` : `TOP ${Math.min(3, newsClusters.length)}`}
+              {showAllClusters ? `전체 ${newsDisplayData.length}` : `TOP ${Math.min(3, newsDisplayData.length)}`}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground mb-4">가장 영향력 있는 뉴스 클러스터</p>
-          
-          <div className="space-y-3">
-            {(showAllClusters ? newsClusters : newsClusters.slice(0, 3)).map((cluster, index) => (
+
+          {isLoadingClusters ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                {(showAllClusters ? newsDisplayData : newsDisplayData.slice(0, 3)).map((cluster, index) => (
               <div
                 key={index}
                 className="p-4 rounded-xl bg-gradient-to-r from-gray-50 to-white hover:from-indigo-50 hover:to-purple-50 border border-transparent hover:border-indigo-200 transition-all cursor-pointer group"
@@ -552,16 +697,18 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                   <span>{cluster.updatedAt}</span>
                 </div>
               </div>
-            ))}
-          </div>
-          
-          {newsClusters.length > 3 && (
-            <button 
-              onClick={() => setShowAllClusters(!showAllClusters)}
-              className="w-full mt-3 py-2 text-sm text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
-            >
-              {showAllClusters ? '접기' : `전체 ${newsClusters.length}개 클러스터 보기`}
-            </button>
+                ))}
+              </div>
+
+              {newsDisplayData.length > 3 && (
+                <button
+                  onClick={() => setShowAllClusters(!showAllClusters)}
+                  className="w-full mt-3 py-2 text-sm text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                >
+                  {showAllClusters ? '접기' : `전체 ${newsDisplayData.length}개 클러스터 보기`}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

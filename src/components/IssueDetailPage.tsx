@@ -4,15 +4,9 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { ArrowLeft, ExternalLink, Calendar, Tag } from 'lucide-react';
 import type { Page } from '../App';
-
-interface Article {
-  article_index: number;
-  title: string;
-  link: string;
-  description: string;
-  pub_date: string;
-  source: string;
-}
+import * as IssueAPI from '../lib/api/issues';
+import * as IssueHelpers from '../lib/utils/issueHelpers';
+import type { Article } from '../types/issue';
 
 interface ClusterData {
   title: string;
@@ -21,6 +15,9 @@ interface ClusterData {
   articles: number;
   createdAt: string;
   updatedAt: string;
+  cluster_id?: string;
+  collected_at?: string;
+  article_indices?: number[];
 }
 
 interface IssueDetailPageProps {
@@ -32,70 +29,87 @@ interface IssueDetailPageProps {
 export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: IssueDetailPageProps) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+  const articlesPerPage = 10;
+
+  // collected_at 추출 (cluster에서 또는 현재 시간 사용)
+  const collectedAt = cluster.collected_at || new Date().toISOString();
 
   useEffect(() => {
-    // Mock API call to fetch articles
-    // In real implementation, this would call:
-    // GET /api/issue-index/articles?collected_at=2025-01-01T14:00:00Z&indices=0,1,2
-    
     const fetchArticles = async () => {
       setLoading(true);
-      
-      // Simulating API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock data based on the API response format
-      const mockArticles: Article[] = [
-        {
-          article_index: 0,
-          title: 'OpenAI, GPT-5 개발 중단 발표',
-          link: 'https://news.example.com/article/123',
-          description: 'OpenAI가 GPT-5 개발을 중단한다고 발표했습니다. 이는 AI 안전성에 대한 우려가 반영된 결정으로 보입니다...',
-          pub_date: '2025-01-01T12:30:00.000Z',
-          source: 'naver'
-        },
-        {
-          article_index: 1,
-          title: 'GPT-5 개발 중단, 업계 반응은?',
-          link: 'https://news.example.com/article/124',
-          description: 'OpenAI의 GPT-5 개발 중단 소식에 AI 업계가 다양한 반응을 보이고 있습니다. 전문가들은 이번 결정이 AI 윤리와 안전성을 중시하는 흐름이라고 평가합니다...',
-          pub_date: '2025-01-01T13:15:00.000Z',
-          source: 'daum'
-        },
-        {
-          article_index: 2,
-          title: 'AI 안전성 강화 움직임 확산',
-          link: 'https://news.example.com/article/125',
-          description: 'OpenAI의 GPT-5 개발 중단을 계기로 AI 업계 전반에 안전성 강화 움직임이 확산되고 있습니다. 다른 AI 기업들도 유사한 조치를 고려 중인 것으로 알려졌습니다...',
-          pub_date: '2025-01-01T14:00:00.000Z',
-          source: 'naver'
-        },
-        {
-          article_index: 3,
-          title: 'GPT-4 개선 버전 출시 예정',
-          link: 'https://news.example.com/article/126',
-          description: 'OpenAI는 GPT-5 대신 GPT-4의 개선 버전을 출시할 계획이라고 밝혔습니다. 안전성과 성능을 모두 개선한 모델이 될 것으로 기대됩니다...',
-          pub_date: '2025-01-01T15:20:00.000Z',
-          source: 'google'
-        },
-      ];
-      
-      setArticles(mockArticles.slice(0, cluster.articles > 10 ? 10 : cluster.articles));
-      setLoading(false);
+      setError(null);
+
+      try {
+        // cluster에 article_indices가 있는 경우 (ClusterSnapshot 타입)
+        if (cluster.article_indices && cluster.article_indices.length > 0) {
+          // 페이지네이션을 위한 인덱스 계산
+          const start = (currentPage - 1) * articlesPerPage;
+          const end = start + articlesPerPage;
+          const pageIndices = cluster.article_indices.slice(start, end);
+
+          // API 호출
+          const response = await IssueAPI.getArticles(collectedAt, pageIndices);
+          setArticles(response.data);
+        } else {
+          // article_indices가 없는 경우 Mock 데이터 사용
+          const mockArticles: Article[] = [
+            {
+              article_index: 0,
+              title: 'OpenAI, GPT-5 개발 중단 발표',
+              link: 'https://news.example.com/article/123',
+              description: 'OpenAI가 GPT-5 개발을 중단한다고 발표했습니다. 이는 AI 안전성에 대한 우려가 반영된 결정으로 보입니다...',
+              pub_date: '2025-01-01T12:30:00.000Z',
+              source: 'naver'
+            },
+            {
+              article_index: 1,
+              title: 'GPT-5 개발 중단, 업계 반응은?',
+              link: 'https://news.example.com/article/124',
+              description: 'OpenAI의 GPT-5 개발 중단 소식에 AI 업계가 다양한 반응을 보이고 있습니다. 전문가들은 이번 결정이 AI 윤리와 안전성을 중시하는 흐름이라고 평가합니다...',
+              pub_date: '2025-01-01T13:15:00.000Z',
+              source: 'daum'
+            },
+            {
+              article_index: 2,
+              title: 'AI 안전성 강화 움직임 확산',
+              link: 'https://news.example.com/article/125',
+              description: 'OpenAI의 GPT-5 개발 중단을 계기로 AI 업계 전반에 안전성 강화 움직임이 확산되고 있습니다. 다른 AI 기업들도 유사한 조치를 고려 중인 것으로 알려졌습니다...',
+              pub_date: '2025-01-01T14:00:00.000Z',
+              source: 'naver'
+            },
+            {
+              article_index: 3,
+              title: 'GPT-4 개선 버전 출시 예정',
+              link: 'https://news.example.com/article/126',
+              description: 'OpenAI는 GPT-5 대신 GPT-4의 개선 버전을 출시할 계획이라고 밝혔습니다. 안전성과 성능을 모두 개선한 모델이 될 것으로 기대됩니다...',
+              pub_date: '2025-01-01T15:20:00.000Z',
+              source: 'google'
+            },
+          ];
+
+          setArticles(mockArticles.slice(0, Math.min(cluster.articles, 10)));
+        }
+      } catch (err: any) {
+        console.error('Failed to fetch articles:', err);
+        setError(err.response?.data?.message || '기사를 불러오는데 실패했습니다.');
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchArticles();
-  }, [cluster]);
+  }, [cluster, currentPage, collectedAt]);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
+  // 총 페이지 수 계산
+  const totalPages = cluster.article_indices
+    ? IssueHelpers.calculateTotalPages(cluster.article_indices.length, articlesPerPage)
+    : Math.ceil(cluster.articles / articlesPerPage);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const getSourceBadgeColor = (source: string) => {
@@ -200,7 +214,7 @@ export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: Is
                     
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">
-                        {formatDate(article.pub_date)}
+                        {IssueHelpers.formatDateTime(article.pub_date)}
                       </span>
                       <Button
                         size="sm"
@@ -213,6 +227,63 @@ export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: Is
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Error Display */}
+            {error && (
+              <div className="p-4 bg-red-50 text-red-600 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {!loading && !error && totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  이전
+                </Button>
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+
+                    return (
+                      <Button
+                        key={pageNum}
+                        size="sm"
+                        variant={currentPage === pageNum ? 'default' : 'outline'}
+                        onClick={() => handlePageChange(pageNum)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  다음
+                </Button>
               </div>
             )}
           </CardContent>
