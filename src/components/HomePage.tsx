@@ -13,11 +13,14 @@ import {
   ChevronRight,
   BarChart3,
   ArrowUp,
+  Loader2,
 } from "lucide-react";
 import type { UserData, Page } from "../App";
-import { useState, type UIEvent } from "react";
+import { useState, useEffect, type UIEvent } from "react";
 import { AppHeader } from "./AppHeader";
 import { motion } from "framer-motion";
+import * as IssueAPI from '../lib/api/issues';
+import type { CurrentIssueIndex } from '../types/issue';
 
 interface HomePageProps {
   userData: UserData;
@@ -32,8 +35,29 @@ export function HomePage({
 }: HomePageProps) {
   const [currentSection, setCurrentSection] = useState(0);
 
-  // Mock data
-  const issueIndex = 72;
+  // API State
+  const [currentIndex, setCurrentIndex] = useState<CurrentIssueIndex | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // API 호출
+  useEffect(() => {
+    const fetchCurrentIndex = async () => {
+      setIsLoading(true);
+      try {
+        const response = await IssueAPI.getCurrentIssueIndex();
+        setCurrentIndex(response.data);
+      } catch (err) {
+        console.error('Failed to fetch current index:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCurrentIndex();
+  }, []);
+
+  // Mock data (폴백용)
+  const issueIndex = currentIndex?.overall_index ?? 72;
   const topModels = [
     { name: "GPT-4 Turbo", score: 95, category: "대화형 AI" },
     { name: "Claude 3 Opus", score: 93, category: "대화형 AI" },
@@ -172,19 +196,29 @@ export function HomePage({
                     </div>
 
                     {/* 통계 카드 */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="text-center p-3 rounded-lg bg-gray-50">
-                        <BarChart3 className="h-4 w-4 text-indigo-600 mx-auto mb-1" />
-                        <div className="text-xl">12</div>
-                        <div className="text-xs text-muted-foreground mt-1">활성 클러스터</div>
+                    {isLoading ? (
+                      <div className="flex items-center justify-center p-4">
+                        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                       </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="text-center p-3 rounded-lg bg-gray-50">
+                          <BarChart3 className="h-4 w-4 text-indigo-600 mx-auto mb-1" />
+                          <div className="text-xl">{currentIndex?.active_clusters_count ?? 12}</div>
+                          <div className="text-xs text-muted-foreground mt-1">활성 클러스터</div>
+                        </div>
 
-                      <div className="text-center p-3 rounded-lg bg-gray-50">
-                        <Newspaper className="h-4 w-4 text-indigo-600 mx-auto mb-1" />
-                        <div className="text-xl">3.2k</div>
-                        <div className="text-xs text-muted-foreground mt-1">분석 기사</div>
+                        <div className="text-center p-3 rounded-lg bg-gray-50">
+                          <Newspaper className="h-4 w-4 text-indigo-600 mx-auto mb-1" />
+                          <div className="text-xl">
+                            {currentIndex?.total_articles_analyzed
+                              ? (currentIndex.total_articles_analyzed / 1000).toFixed(1) + 'k'
+                              : '3.2k'}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">분석 기사</div>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
