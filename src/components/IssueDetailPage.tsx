@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { ArrowLeft, ExternalLink, Calendar, Tag, Loader2 } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Calendar, Tag } from 'lucide-react';
 import type { Page } from '../App';
 import * as IssueAPI from '../lib/api/issues';
 import * as IssueHelpers from '../lib/utils/issueHelpers';
-import type { Article, ClusterSnapshot } from '../types/issue';
+import type { Article } from '../types/issue';
 
 interface ClusterData {
   title: string;

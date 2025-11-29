@@ -35,11 +35,8 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
   const [clusters, setClusters] = useState<ClusterSnapshot[]>([]);
 
   // Loading States
-  const [isLoadingCurrent, setIsLoadingCurrent] = useState(false);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [isLoadingClusters, setIsLoadingClusters] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // 스크롤 핸들러 (메인 화면 방식)
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -165,8 +162,6 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
 
   // 현재 이슈 지수 조회
   const fetchCurrentIndex = async () => {
-    setIsLoadingCurrent(true);
-    setError(null);
     try {
       const response = await IssueAPI.getCurrentIssueIndex();
       setCurrentIndex(response.data);
@@ -177,23 +172,17 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
       }
     } catch (err: any) {
       console.error('Failed to fetch current index:', err);
-      setError(err.response?.data?.message || '현재 이슈 지수를 불러오는데 실패했습니다.');
-    } finally {
-      setIsLoadingCurrent(false);
     }
   };
 
   // 히스토리 데이터 조회
   const fetchHistoryData = async (range: '7d' | '30d') => {
-    setIsLoadingHistory(true);
     try {
       const days = range === '7d' ? 7 : 30;
       const data = await IssueAPI.getRecentIssueIndices(days);
       setHistoryData(data);
     } catch (err: any) {
       console.error('Failed to fetch history:', err);
-    } finally {
-      setIsLoadingHistory(false);
     }
   };
 
