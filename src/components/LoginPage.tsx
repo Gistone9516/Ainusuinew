@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -44,7 +43,6 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin, onSignup }: LoginPageProps) {
-  const navigate = useNavigate();
 
   // ==================== State 정의 ====================
   const [pageState, setPageState] = useState<AuthPageState>({
