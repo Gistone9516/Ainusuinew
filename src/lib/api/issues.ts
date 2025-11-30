@@ -7,10 +7,33 @@ import type * as T from '../../types/issue';
  * 1. 현재 이슈 지수 조회
  */
 export const getCurrentIssueIndex = async (): Promise<T.CurrentIssueIndexResponse> => {
-  const { data } = await apiClient.get<T.CurrentIssueIndexResponse>(
-    '/issue-index/current'
-  );
-  return data;
+  console.log('[IssueAPI] getCurrentIssueIndex called');
+  console.log('[IssueAPI] apiClient baseURL:', apiClient.defaults.baseURL);
+  try {
+    const { data } = await apiClient.get<T.CurrentIssueIndexResponse>(
+      '/issue-index/current'
+    );
+    console.log('[IssueAPI] Response received:', JSON.stringify(data, null, 2));
+    console.log('[IssueAPI] Response type:', typeof data);
+    console.log('[IssueAPI] Response keys:', data ? Object.keys(data) : 'null');
+    
+    // 서버 응답 구조 정규화: 
+    // 서버가 { success, data } 형태 또는 직접 데이터를 반환할 수 있음
+    if (data && 'success' in data && 'data' in data) {
+      // 이미 래핑된 응답
+      return data;
+    } else if (data && 'collected_at' in data) {
+      // 직접 데이터 반환 - 래핑해서 반환
+      console.log('[IssueAPI] Wrapping raw response');
+      return { success: true, data: data as unknown as T.CurrentIssueIndex };
+    }
+    
+    return data;
+  } catch (error: any) {
+    console.error('[IssueAPI] Request failed:', error);
+    console.error('[IssueAPI] Error config:', error?.config);
+    throw error;
+  }
 };
 
 /**
@@ -20,11 +43,27 @@ export const getCurrentIssueIndex = async (): Promise<T.CurrentIssueIndexRespons
 export const getIssueIndexHistory = async (
   date: string
 ): Promise<T.IssueIndexHistoryResponse> => {
-  const { data } = await apiClient.get<T.IssueIndexHistoryResponse>(
-    '/issue-index/history',
-    { params: { date } }
-  );
-  return data;
+  try {
+    const { data } = await apiClient.get<T.IssueIndexHistoryResponse>(
+      '/issue-index/history',
+      { params: { date } }
+    );
+    console.log('[IssueAPI] History response for', date, ':', JSON.stringify(data, null, 2));
+    
+    // 서버 응답 구조 정규화
+    if (data && 'success' in data && 'data' in data) {
+      return data;
+    } else if (Array.isArray(data)) {
+      // 직접 배열 반환
+      return { success: true, data: data as T.IssueIndexHistoryItem[] };
+    }
+    
+    return data;
+  } catch (error: any) {
+    console.error('[IssueAPI] History request failed for', date, ':', error?.message);
+    // 히스토리 실패 시 빈 배열 반환 (전체 앱 중단 방지)
+    return { success: false, data: [] };
+  }
 };
 
 /**
@@ -71,11 +110,18 @@ export const getArticles = async (
 export const getAllJobIndices = async (
   collectedAt?: string
 ): Promise<T.AllJobIndicesResponse> => {
-  const { data } = await apiClient.get<T.AllJobIndicesResponse>(
-    '/issue-index/jobs/all',
-    { params: collectedAt ? { collected_at: collectedAt } : {} }
-  );
-  return data;
+  try {
+    const { data } = await apiClient.get<T.AllJobIndicesResponse>(
+      '/issue-index/jobs/all',
+      { params: collectedAt ? { collected_at: collectedAt } : {} }
+    );
+    console.log('[IssueAPI] All job indices response:', JSON.stringify(data, null, 2));
+    return data;
+  } catch (error: any) {
+    console.error('[IssueAPI] getAllJobIndices failed:', error?.message);
+    // 실패 시 기본값 반환
+    return { collected_at: new Date().toISOString(), jobs: [] };
+  }
 };
 
 /**

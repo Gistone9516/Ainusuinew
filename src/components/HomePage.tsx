@@ -42,17 +42,24 @@ export function HomePage({
   // API 호출
   useEffect(() => {
     const fetchCurrentIndex = async () => {
+      console.log('[HomePage] Starting API call...');
       setIsLoading(true);
       try {
+        console.log('[HomePage] Calling IssueAPI.getCurrentIssueIndex()...');
         const response = await IssueAPI.getCurrentIssueIndex();
+        console.log('[HomePage] API Response:', response);
         setCurrentIndex(response.data);
-      } catch (err) {
-        console.error('Failed to fetch current index:', err);
+      } catch (err: any) {
+        console.error('[HomePage] API Error:', err);
+        console.error('[HomePage] Error message:', err?.message);
+        console.error('[HomePage] Error response:', err?.response);
+        alert(`API 오류: ${err?.message || '알 수 없는 오류'}`);
       } finally {
         setIsLoading(false);
       }
     };
 
+    console.log('[HomePage] useEffect triggered, calling fetchCurrentIndex...');
     fetchCurrentIndex();
   }, []);
 

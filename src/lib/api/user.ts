@@ -103,8 +103,17 @@ export const deleteAccount = async (): Promise<void> => {
  * 직업 카테고리 목록 조회
  */
 export const getJobCategories = async (): Promise<T.JobCategoryData[]> => {
-  const { data } = await apiClient.get<T.GetJobCategoriesResponse>('/job-categories');
-  return data.data;
+  try {
+    const { data } = await apiClient.get<T.GetJobCategoriesResponse>('/job-categories');
+    console.log('[UserAPI] getJobCategories response:', data);
+    
+    // 정규화된 응답에서 데이터 추출
+    const categories = data?.data || data;
+    return Array.isArray(categories) ? categories : [];
+  } catch (error: any) {
+    console.error('[UserAPI] getJobCategories failed:', error?.message);
+    return [];
+  }
 };
 
 // ==================== 내 활동 API ====================
@@ -119,22 +128,36 @@ export const getMyPosts = async (
 ): Promise<T.PaginatedData<T.MyPost>> => {
   const { page = 1, limit = 20 } = params;
 
-  // 전체 게시글 가져오기
-  const { data } = await apiClient.get<T.GetMyPostsResponse>('/community/posts', {
-    params: { page, limit, sort: 'recent' },
-  });
+  try {
+    // 전체 게시글 가져오기
+    const { data } = await apiClient.get<T.GetMyPostsResponse>('/community/posts', {
+      params: { page, limit, sort: 'recent' },
+    });
 
-  // 클라이언트에서 필터링
-  const myPosts = data.data.items.filter(
-    (post: T.MyPost) => post.author.user_id === userId
-  );
+    // 정규화된 응답에서 데이터 추출
+    const responseData = data?.data || data;
+    const items = responseData?.items || [];
 
-  return {
-    items: myPosts,
-    total: myPosts.length,
-    page,
-    limit,
-  };
+    // 클라이언트에서 필터링
+    const myPosts = items.filter(
+      (post: T.MyPost) => post.author?.user_id === userId
+    );
+
+    return {
+      items: myPosts,
+      total: myPosts.length,
+      page,
+      limit,
+    };
+  } catch (error: any) {
+    console.error('[UserAPI] getMyPosts failed:', error?.message);
+    return {
+      items: [],
+      total: 0,
+      page,
+      limit,
+    };
+  }
 };
 
 /**

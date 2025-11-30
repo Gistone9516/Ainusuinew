@@ -53,8 +53,15 @@
       target: 'esnext',
       outDir: 'build',
     },
-    server: {
-      port: 3000,
-      open: true,
+  server: {
+    port: 5173, // 프론트엔드는 5173 포트 사용
+    open: true,
+    proxy: {
+      '/api': {
+        target: 'http://192.168.35.125:3000', // 백엔드 서버 IP
+        changeOrigin: true,
+        secure: false,
+      },
     },
+  },
   });

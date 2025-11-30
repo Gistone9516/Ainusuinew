@@ -1,7 +1,37 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { Capacitor } from '@capacitor/core';
 
-// Base URL from environment or default
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
+// Capacitor(Android/iOS) 환경에서는 실제 서버 IP 사용
+// 웹에서는 proxy를 통해 상대 경로 사용 (개발 환경)
+// 환경변수 VITE_API_BASE_URL이 설정되어 있으면 우선 사용
+const getBaseUrl = (): string => {
+  // 환경 변수가 설정되어 있으면 우선 사용
+  if (import.meta.env.VITE_API_BASE_URL) {
+    console.log('[API Client] Using env VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+
+  // Capacitor Native 플랫폼 체크
+  const isNative = Capacitor.isNativePlatform();
+  const platform = Capacitor.getPlatform();
+  
+  console.log('[API Client] Platform:', platform, '| isNative:', isNative);
+
+  if (isNative) {
+    // Native 플랫폼에서는 실제 서버 IP 사용
+    // 환경변수가 없을 경우 하드코딩된 IP 사용
+    const nativeApiUrl = 'http://192.168.35.125:3000/api';
+    console.log('[API Client] Native platform detected, using:', nativeApiUrl);
+    return nativeApiUrl;
+  }
+  
+  // 웹 개발 환경: Vite proxy를 통해 상대 경로 사용
+  console.log('[API Client] Web environment, using relative path: /api');
+  return '/api';
+};
+
+const BASE_URL = getBaseUrl();
+console.log('[API Client] Final BASE_URL:', BASE_URL);
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
@@ -19,19 +49,52 @@ apiClient.interceptors.request.use(
     if (accessToken && config.headers) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
+    console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, config);
     return config;
   },
   (error) => {
+    console.error('[API Request Error]', error);
     return Promise.reject(error);
   }
 );
 
-// Response interceptor - Handle token refresh
+// 응답 데이터 정규화 헬퍼
+const normalizeResponseData = (data: any, url: string): any => {
+  // 이미 정규화된 응답 ({ success, data } 형태)
+  if (data && typeof data === 'object' && 'success' in data && 'data' in data) {
+    console.log(`[API Client] Response already normalized for ${url}`);
+    return data;
+  }
+  
+  // 배열 응답 - 래핑
+  if (Array.isArray(data)) {
+    console.log(`[API Client] Wrapping array response for ${url}`);
+    return { success: true, data };
+  }
+  
+  // 객체 응답 - 래핑 (success 필드가 없는 경우)
+  if (data && typeof data === 'object') {
+    console.log(`[API Client] Wrapping object response for ${url}`);
+    return { success: true, data };
+  }
+  
+  // 그 외 (null, undefined, primitive) - 그대로 반환
+  return data;
+};
+
+// Response interceptor - Handle token refresh & normalize response
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
+    const url = response.config.url || '';
+    console.log(`[API Response] ${response.status} ${url}`, response.data);
+    
+    // 응답 데이터 정규화
+    response.data = normalizeResponseData(response.data, url);
+    
     return response;
   },
   async (error) => {
+    console.error('[API Response Error]', error);
     const originalRequest = error.config;
 
     // If error is 401 and we haven't tried to refresh yet
@@ -49,7 +112,12 @@ apiClient.interceptors.response.use(
           refreshToken,
         });
 
-        const { accessToken } = response.data.data;
+        // 응답 구조에 따라 accessToken 추출
+        const responseData = response.data;
+        const accessToken = responseData?.data?.accessToken || responseData?.accessToken;
+        if (!accessToken) {
+          throw new Error('No access token in refresh response');
+        }
         localStorage.setItem('accessToken', accessToken);
 
         // Retry original request with new token

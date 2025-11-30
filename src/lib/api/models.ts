@@ -23,11 +23,17 @@ export const classifyAndRecommend = async (
   userInput: string,
   limit: number = 5
 ): Promise<T.ClassifyAndRecommendApiResponse> => {
-  const { data } = await apiClient.post<T.ClassifyAndRecommendApiResponse>(
-    '/tasks/classify-and-recommend',
-    { user_input: userInput, limit }
-  );
-  return data;
+  try {
+    const { data } = await apiClient.post<T.ClassifyAndRecommendApiResponse>(
+      '/tasks/classify-and-recommend',
+      { user_input: userInput, limit }
+    );
+    console.log('[ModelAPI] classifyAndRecommend response:', data);
+    return data;
+  } catch (error: any) {
+    console.error('[ModelAPI] classifyAndRecommend failed:', error?.message);
+    throw error;
+  }
 };
 
 /**
@@ -64,14 +70,20 @@ export const getModels = async (params?: {
   limit?: number;
   is_active?: boolean;
 }): Promise<T.ModelsResponse> => {
-  const { data } = await apiClient.get<T.ModelsResponse>('/models', {
-    params: {
-      page: params?.page || 1,
-      limit: params?.limit || 20,
-      is_active: params?.is_active !== false,
-    },
-  });
-  return data;
+  try {
+    const { data } = await apiClient.get<T.ModelsResponse>('/models', {
+      params: {
+        page: params?.page || 1,
+        limit: params?.limit || 20,
+        is_active: params?.is_active !== false,
+      },
+    });
+    console.log('[ModelAPI] getModels response:', data);
+    return data;
+  } catch (error: any) {
+    console.error('[ModelAPI] getModels failed:', error?.message);
+    throw error;
+  }
 };
 
 /**
@@ -80,10 +92,16 @@ export const getModels = async (params?: {
 export const getModelDetail = async (
   modelId: string
 ): Promise<T.ModelDetailResponse> => {
-  const { data } = await apiClient.get<T.ModelDetailResponse>(
-    `/models/${modelId}`
-  );
-  return data;
+  try {
+    const { data } = await apiClient.get<T.ModelDetailResponse>(
+      `/models/${modelId}`
+    );
+    console.log('[ModelAPI] getModelDetail response:', data);
+    return data;
+  } catch (error: any) {
+    console.error('[ModelAPI] getModelDetail failed:', error?.message);
+    throw error;
+  }
 };
 
 /**
@@ -136,17 +154,23 @@ export const getModelsByJobCategory = async (params: {
   job_category_code?: string;
   limit?: number;
 }): Promise<T.JobRecommendationApiResponse> => {
-  const { data } = await apiClient.get<T.JobRecommendationApiResponse>(
-    '/models/recommend',
-    {
-      params: {
-        job_category_id: params.job_category_id,
-        job_category_code: params.job_category_code,
-        limit: params.limit || 3,
-      },
-    }
-  );
-  return data;
+  try {
+    const { data } = await apiClient.get<T.JobRecommendationApiResponse>(
+      '/models/recommend',
+      {
+        params: {
+          job_category_id: params.job_category_id,
+          job_category_code: params.job_category_code,
+          limit: params.limit || 3,
+        },
+      }
+    );
+    console.log('[ModelAPI] getModelsByJobCategory response:', data);
+    return data;
+  } catch (error: any) {
+    console.error('[ModelAPI] getModelsByJobCategory failed:', error?.message);
+    throw error;
+  }
 };
 
 // ==================== 모델 비교 API ====================

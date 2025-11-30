@@ -18,20 +18,32 @@ export const createPost = async (data: T.CreatePostRequest): Promise<T.CreatePos
  * 2. 게시글 목록 조회
  */
 export const getPosts = async (params: T.GetPostsParams = {}): Promise<T.GetPostsResponse> => {
-  const response = await apiClient.get<T.GetPostsResponse>('/community/posts', {
-    params,
-  });
-  return response.data;
+  try {
+    const response = await apiClient.get<T.GetPostsResponse>('/community/posts', {
+      params,
+    });
+    console.log('[CommunityAPI] getPosts response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('[CommunityAPI] getPosts failed:', error?.message);
+    throw error;
+  }
 };
 
 /**
  * 3. 게시글 상세 조회
  */
 export const getPostDetail = async (postId: number): Promise<T.GetPostDetailResponse> => {
-  const response = await apiClient.get<T.GetPostDetailResponse>(
-    `/community/posts/${postId}`
-  );
-  return response.data;
+  try {
+    const response = await apiClient.get<T.GetPostDetailResponse>(
+      `/community/posts/${postId}`
+    );
+    console.log('[CommunityAPI] getPostDetail response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('[CommunityAPI] getPostDetail failed:', error?.message);
+    throw error;
+  }
 };
 
 /**

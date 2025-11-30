@@ -9,17 +9,24 @@ import type * as T from '../../types/auth';
 export const register = async (
   data: T.RegisterRequest
 ): Promise<T.RegisterResponse> => {
-  const response = await apiClient.post<T.RegisterResponse>(
-    '/auth/register',
-    data
-  );
+  try {
+    const response = await apiClient.post<T.RegisterResponse>(
+      '/auth/register',
+      data
+    );
 
-  // 토큰 저장
-  if (response.data.data?.tokens) {
-    saveTokens(response.data.data.tokens);
+    // 정규화된 응답에서 토큰 저장
+    const responseData = response.data;
+    const tokens = responseData?.data?.tokens || responseData?.tokens;
+    if (tokens) {
+      saveTokens(tokens);
+    }
+
+    return responseData;
+  } catch (error: any) {
+    console.error('[AuthAPI] register failed:', error?.message);
+    throw error;
   }
-
-  return response.data;
 };
 
 /**
@@ -43,36 +50,49 @@ export const checkEmailAvailability = async (
 export const login = async (
   data: T.LoginRequest
 ): Promise<T.LoginResponse> => {
-  const response = await apiClient.post<T.LoginResponse>(
-    '/auth/login',
-    data
-  );
+  try {
+    const response = await apiClient.post<T.LoginResponse>(
+      '/auth/login',
+      data
+    );
 
-  // 토큰 저장
-  if (response.data.data?.tokens) {
-    saveTokens(response.data.data.tokens);
+    // 정규화된 응답에서 토큰 저장
+    const responseData = response.data;
+    const tokens = responseData?.data?.tokens || responseData?.tokens;
+    if (tokens) {
+      saveTokens(tokens);
+    }
+
+    return responseData;
+  } catch (error: any) {
+    console.error('[AuthAPI] login failed:', error?.message);
+    throw error;
   }
-
-  return response.data;
 };
 
 /**
  * 4. 토큰 갱신
  */
 export const refreshToken = async (
-  refreshToken: string
+  refreshTokenValue: string
 ): Promise<T.RefreshResponse> => {
-  const { data } = await apiClient.post<T.RefreshResponse>(
-    '/auth/refresh',
-    { refreshToken }
-  );
+  try {
+    const { data } = await apiClient.post<T.RefreshResponse>(
+      '/auth/refresh',
+      { refreshToken: refreshTokenValue }
+    );
 
-  // 새 Access Token 저장
-  if (data.data?.accessToken) {
-    localStorage.setItem('accessToken', data.data.accessToken);
+    // 정규화된 응답에서 새 Access Token 저장
+    const accessToken = data?.data?.accessToken || data?.accessToken;
+    if (accessToken) {
+      localStorage.setItem('accessToken', accessToken);
+    }
+
+    return data;
+  } catch (error: any) {
+    console.error('[AuthAPI] refreshToken failed:', error?.message);
+    throw error;
   }
-
-  return data;
 };
 
 /**
@@ -93,8 +113,20 @@ export const logout = async (): Promise<T.LogoutResponse> => {
  * 6. 현재 사용자 정보
  */
 export const getCurrentUser = async (): Promise<T.User> => {
-  const { data } = await apiClient.get<T.MeResponse>('/auth/me');
-  return data.data!;
+  try {
+    const { data } = await apiClient.get<T.MeResponse>('/auth/me');
+    console.log('[AuthAPI] getCurrentUser response:', data);
+    
+    // 정규화된 응답에서 사용자 데이터 추출
+    const user = data?.data || data;
+    if (!user || !user.user_id) {
+      throw new Error('Invalid user data received');
+    }
+    return user as T.User;
+  } catch (error: any) {
+    console.error('[AuthAPI] getCurrentUser failed:', error?.message);
+    throw error;
+  }
 };
 
 // ==================== 비밀번호 관리 API ====================
@@ -151,7 +183,8 @@ export const getOAuthUrl = (provider: T.OAuthProvider): string => {
  * OAuth 로그인 시작
  */
 export const initiateOAuthLogin = (provider: T.OAuthProvider): void => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
+  // 환경 변수가 있으면 사용, 없으면 백엔드 서버 IP 직접 지정
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://192.168.35.125:3000/api';
   window.location.href = `${baseUrl}/auth/${provider}`;
 };
 
