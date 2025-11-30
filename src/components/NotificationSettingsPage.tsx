@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
-import { ChevronLeft, Bell, BellRing, MessageSquare, TrendingUp, Sparkles } from 'lucide-react';
+import { ChevronLeft, Bell, BellRing, MessageSquare } from 'lucide-react';
+import {
+  getNotificationSettings,
+  saveNotificationSettings,
+} from '@/lib/api/settings';
 
 interface NotificationSettingsPageProps {
   onBack: () => void;
@@ -11,16 +15,26 @@ interface NotificationSettingsPageProps {
 
 export function NotificationSettingsPage({ onBack }: NotificationSettingsPageProps) {
   const [pushEnabled, setPushEnabled] = useState(true);
-  const [issueAlerts, setIssueAlerts] = useState(true);
-  const [communityAlerts, setCommunityAlerts] = useState(true);
-  const [modelUpdates, setModelUpdates] = useState(true);
-  const [newsAlerts, setNewsAlerts] = useState(true);
-  const [commentAlerts, setCommentAlerts] = useState(true);
-  const [likeAlerts, setLikeAlerts] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [vibrationEnabled, setVibrationEnabled] = useState(true);
+  const [contentEnabled, setContentEnabled] = useState(true);
+  const [communityEnabled, setCommunityEnabled] = useState(true);
 
-  const issueThreshold = 70;
+  useEffect(() => {
+    // 저장된 알림 설정 불러오기
+    const settings = getNotificationSettings();
+    setPushEnabled(settings.push);
+    setContentEnabled(settings.content);
+    setCommunityEnabled(settings.community);
+  }, []);
+
+  const handleSave = () => {
+    saveNotificationSettings({
+      push: pushEnabled,
+      content: contentEnabled,
+      community: communityEnabled,
+    });
+    alert('알림 설정이 저장되었습니다.');
+    onBack();
+  };
 
   return (
     <div className="min-h-screen p-4 bg-gray-50">
@@ -69,57 +83,18 @@ export function NotificationSettingsPage({ onBack }: NotificationSettingsPagePro
             </div>
             <CardDescription>AI 관련 정보 알림</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-indigo-600" />
-                  <Label htmlFor="issue-alerts" className="text-base">AI 이슈 지수 알림</Label>
-                </div>
+                <Label htmlFor="content-enabled" className="text-base">콘텐츠 알림 허용</Label>
                 <p className="text-sm text-muted-foreground">
-                  이슈 지수가 {issueThreshold}점 이상일 때 알림
+                  AI 이슈, 새 모델, 관심 태그 뉴스 알림
                 </p>
               </div>
               <Switch
-                id="issue-alerts"
-                checked={issueAlerts}
-                onCheckedChange={setIssueAlerts}
-                disabled={!pushEnabled}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-indigo-600" />
-                  <Label htmlFor="model-updates" className="text-base">새로운 모델 출시</Label>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  새로운 AI 모델이 출시되면 알림
-                </p>
-              </div>
-              <Switch
-                id="model-updates"
-                checked={modelUpdates}
-                onCheckedChange={setModelUpdates}
-                disabled={!pushEnabled}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-indigo-600" />
-                  <Label htmlFor="news-alerts" className="text-base">관심 태그 뉴스</Label>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  관심 태그 관련 주요 뉴스 알림
-                </p>
-              </div>
-              <Switch
-                id="news-alerts"
-                checked={newsAlerts}
-                onCheckedChange={setNewsAlerts}
+                id="content-enabled"
+                checked={contentEnabled}
+                onCheckedChange={setContentEnabled}
                 disabled={!pushEnabled}
               />
             </div>
@@ -135,86 +110,18 @@ export function NotificationSettingsPage({ onBack }: NotificationSettingsPagePro
             </div>
             <CardDescription>게시글 및 댓글 알림</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="community-alerts" className="text-base">전체 커뮤니티 알림</Label>
+                <Label htmlFor="community-enabled" className="text-base">커뮤니티 알림 허용</Label>
                 <p className="text-sm text-muted-foreground">
-                  인기 게시글 및 이벤트 알림
+                  댓글, 좋아요, 인기 게시글 알림
                 </p>
               </div>
               <Switch
-                id="community-alerts"
-                checked={communityAlerts}
-                onCheckedChange={setCommunityAlerts}
-                disabled={!pushEnabled}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="comment-alerts" className="text-base">댓글 알림</Label>
-                <p className="text-sm text-muted-foreground">
-                  내 게시글에 댓글이 달리면 알림
-                </p>
-              </div>
-              <Switch
-                id="comment-alerts"
-                checked={commentAlerts}
-                onCheckedChange={setCommentAlerts}
-                disabled={!pushEnabled}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="like-alerts" className="text-base">좋아요 알림</Label>
-                <p className="text-sm text-muted-foreground">
-                  내 게시글/댓글에 좋아요가 달리면 알림
-                </p>
-              </div>
-              <Switch
-                id="like-alerts"
-                checked={likeAlerts}
-                onCheckedChange={setLikeAlerts}
-                disabled={!pushEnabled}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Notification Style */}
-        <Card>
-          <CardHeader>
-            <CardTitle>알림 방식</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="sound-enabled" className="text-base">알림음</Label>
-                <p className="text-sm text-muted-foreground">
-                  알림 시 소리 재생
-                </p>
-              </div>
-              <Switch
-                id="sound-enabled"
-                checked={soundEnabled}
-                onCheckedChange={setSoundEnabled}
-                disabled={!pushEnabled}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="vibration-enabled" className="text-base">진동</Label>
-                <p className="text-sm text-muted-foreground">
-                  알림 시 진동
-                </p>
-              </div>
-              <Switch
-                id="vibration-enabled"
-                checked={vibrationEnabled}
-                onCheckedChange={setVibrationEnabled}
+                id="community-enabled"
+                checked={communityEnabled}
+                onCheckedChange={setCommunityEnabled}
                 disabled={!pushEnabled}
               />
             </div>
@@ -223,7 +130,7 @@ export function NotificationSettingsPage({ onBack }: NotificationSettingsPagePro
 
         {/* Action Button */}
         <div className="pb-20">
-          <Button onClick={onBack} className="w-full">
+          <Button onClick={handleSave} className="w-full">
             저장
           </Button>
         </div>

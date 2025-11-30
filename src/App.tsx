@@ -137,9 +137,7 @@ export default function App() {
         />;
       case 'profile-edit':
         return <ProfileEditPage 
-          userData={userData} 
-          onSave={(data) => {
-            setUserData({ ...userData, ...data });
+          onSave={() => {
             setCurrentPage('mypage');
           }}
           onBack={() => setCurrentPage('mypage')}
