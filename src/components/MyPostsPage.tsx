@@ -1,56 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { ChevronLeft, ThumbsUp, MessageCircle, Trash2 } from 'lucide-react';
+import { ChevronLeft, ThumbsUp, MessageCircle, Trash2, Loader2 } from 'lucide-react';
+import { getCurrentUser, getMyPosts, deletePost } from '@/lib/api/user';
+import { formatRelativeTime } from '@/lib/utils/userHelpers';
+import type { MyPost } from '@/types/user';
 
 interface MyPostsPageProps {
   onBack: () => void;
 }
 
 export function MyPostsPage({ onBack }: MyPostsPageProps) {
-  const [posts, setPosts] = useState([
-    {
-      id: 1,
-      category: 'prompt',
-      title: 'GPT-4로 블로그 글 자동 생성하는 프롬프트 공유합니다',
-      content: '안녕하세요! 최근에 GPT-4를 활용해서 블로그 글을 자동으로 생성하는 프롬프트를 만들었는데...',
-      likes: 42,
-      comments: 15,
-      date: '2025-11-21',
-      isHot: true,
-    },
-    {
-      id: 2,
-      category: 'daily',
-      title: 'AI 덕분에 업무 시간 50% 단축했어요',
-      content: '제 업무는 데이터 분석인데, AI를 활용하고 나서 정말 많은 시간을 절약할 수 있었습니다...',
-      likes: 35,
-      comments: 18,
-      date: '2025-11-18',
-      isHot: false,
-    },
-    {
-      id: 3,
-      category: 'review',
-      title: 'Claude 3 한 달 사용 후기',
-      content: 'Claude 3를 한 달 정도 사용해봤는데, ChatGPT와는 다른 매력이 있더라고요...',
-      likes: 28,
-      comments: 12,
-      date: '2025-11-15',
-      isHot: false,
-    },
-    {
-      id: 4,
-      category: 'qna',
-      title: '프롬프트 엔지니어링 공부 방법 추천해주세요',
-      content: '최근에 프롬프트 엔지니어링에 관심이 생겼는데, 어디서부터 시작해야 할지 모르겠어요...',
-      likes: 19,
-      comments: 24,
-      date: '2025-11-12',
-      isHot: false,
-    },
-  ]);
+  const [posts, setPosts] = useState<MyPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadPosts = async () => {
+      try {
+        setLoading(true);
+        const user = await getCurrentUser();
+        const result = await getMyPosts(user.user_id);
+        setPosts(result.items);
+      } catch (err: any) {
+        console.error('Failed to load posts:', err);
+        setError('게시글을 불러오는데 실패했습니다.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPosts();
+  }, []);
 
   const getCategoryBadge = (category: string) => {
     const categoryMap: Record<string, string> = {
@@ -63,11 +45,62 @@ export function MyPostsPage({ onBack }: MyPostsPageProps) {
     return categoryMap[category] || category;
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (postId: number) => {
     if (confirm('정말 삭제하시겠습니까?')) {
-      setPosts(posts.filter(post => post.id !== id));
+      try {
+        await deletePost(postId);
+        setPosts(posts.filter(post => post.post_id !== postId));
+        alert('게시글이 삭제되었습니다.');
+      } catch (err: any) {
+        console.error('Failed to delete post:', err);
+        alert('게시글 삭제에 실패했습니다.');
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-4 pb-20 bg-gray-50">
+        <div className="max-w-2xl mx-auto space-y-4">
+          <div className="pt-4 pb-2">
+            <Button variant="ghost" className="w-fit -ml-2 mb-2" onClick={onBack}>
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              뒤로
+            </Button>
+            <h1 className="text-3xl mt-2 mb-1" style={{ fontWeight: '800', letterSpacing: '-0.02em' }}>내 게시글</h1>
+          </div>
+          <Card>
+            <CardContent className="p-12 text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-indigo-600" />
+              <p className="text-muted-foreground">게시글을 불러오는 중...</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen p-4 pb-20 bg-gray-50">
+        <div className="max-w-2xl mx-auto space-y-4">
+          <div className="pt-4 pb-2">
+            <Button variant="ghost" className="w-fit -ml-2 mb-2" onClick={onBack}>
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              뒤로
+            </Button>
+            <h1 className="text-3xl mt-2 mb-1" style={{ fontWeight: '800', letterSpacing: '-0.02em' }}>내 게시글</h1>
+          </div>
+          <Card>
+            <CardContent className="p-12 text-center">
+              <p className="text-destructive mb-2">{error}</p>
+              <Button onClick={() => window.location.reload()}>다시 시도</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-4 pb-20 bg-gray-50">
@@ -92,13 +125,13 @@ export function MyPostsPage({ onBack }: MyPostsPageProps) {
             </Card>
           ) : (
             posts.map((post) => (
-              <Card key={post.id} className="hover:shadow-md transition-shadow">
+              <Card key={post.post_id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <Badge variant="outline">{getCategoryBadge(post.category)}</Badge>
-                        {post.isHot && (
+                        {post.is_hot && (
                           <Badge variant="destructive" className="text-xs">HOT</Badge>
                         )}
                       </div>
@@ -107,13 +140,13 @@ export function MyPostsPage({ onBack }: MyPostsPageProps) {
                         {post.content}
                       </p>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{post.date}</span>
+                        <span>{formatRelativeTime(post.created_at)}</span>
                       </div>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleDelete(post.id)}
+                      onClick={() => handleDelete(post.post_id)}
                       className="text-destructive hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -122,11 +155,11 @@ export function MyPostsPage({ onBack }: MyPostsPageProps) {
                   <div className="flex items-center gap-4 mt-3 pt-3 border-t">
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <ThumbsUp className="h-4 w-4" />
-                      <span>{post.likes}</span>
+                      <span>{post.like_count}</span>
                     </div>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <MessageCircle className="h-4 w-4" />
-                      <span>{post.comments}</span>
+                      <span>{post.comment_count}</span>
                     </div>
                   </div>
                 </CardContent>
