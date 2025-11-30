@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { ChevronLeft, User } from 'lucide-react';
-import type { UserData } from '../App';
+import type { UserData, Page } from '../App';
 
 interface ProfileEditPageProps {
   userData: UserData;
   onSave: (data: Partial<UserData>) => void;
   onBack: () => void;
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: Page) => void;
 }
 
 const allTags = [

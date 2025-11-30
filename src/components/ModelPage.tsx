@@ -1,188 +1,114 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { useState, useEffect } from 'react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Sparkles, Search, BarChart3, ArrowRight, TrendingUp, TrendingDown, Clock, GitBranch, Zap, ArrowLeft, Loader2, Award } from 'lucide-react';
+import { Sparkles, Search, BarChart3, TrendingUp, TrendingDown, Clock, GitBranch, Zap, ArrowLeft, Loader2, Award } from 'lucide-react';
 import type { UserData, Page } from '../App';
 import { AppHeader } from './AppHeader';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { motion } from 'motion/react';
+import * as modelApi from '../lib/api/models';
+import * as modelHelpers from '../lib/utils/modelHelpers';
+import type * as T from '../types/model';
 
 interface ModelPageProps {
   userData: UserData;
   onNavigate: (page: Page) => void;
 }
 
-// Task recommendation API types
-interface TaskClassification {
-  task_category_id: number;
-  category_code: string;
-  category_name_ko: string;
-  category_name_en: string;
-  confidence_score: number;
-  reasoning: string;
-}
-
-interface BenchmarkScore {
-  name: string;
-  score: number;
-  weight: number;
-  contribution: number;
-}
-
-interface RecommendedModel {
-  rank: number;
-  model_id: string;
-  model_name: string;
-  creator_name: string;
-  weighted_score: number;
-  benchmark_scores: {
-    primary: BenchmarkScore;
-    secondary: BenchmarkScore;
-  };
-  overall_score: number;
-  pricing: {
-    input_price: number;
-    output_price: number;
-  };
-}
-
-interface TaskRecommendationResult {
-  classification: TaskClassification;
-  criteria: {
-    primary_benchmark: string;
-    secondary_benchmark: string;
-    weights: {
-      primary: number;
-      secondary: number;
-    };
-  };
-  recommended_models: RecommendedModel[];
-  metadata: {
-    total_models_evaluated: number;
-    classification_time_ms: number;
-    recommendation_time_ms: number;
-  };
-}
-
 export function ModelPage({ userData, onNavigate }: ModelPageProps) {
   const [taskInput, setTaskInput] = useState('');
   const [modelA, setModelA] = useState<string>('');
   const [modelB, setModelB] = useState<string>('');
-  
+
   // Task recommendation states
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResult, setSearchResult] = useState<TaskRecommendationResult | null>(null);
+  const [searchResult, setSearchResult] = useState<T.ClassifyAndRecommendResponse | null>(null);
   const [showSearchResult, setShowSearchResult] = useState(false);
-  
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Model comparison states
+  const [availableModels, setAvailableModels] = useState<T.Model[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [comparisonResult, setComparisonResult] = useState<T.ModelComparison | null>(null);
+  const [isComparing, setIsComparing] = useState(false);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
+
   // Timeline tab states
   const [selectedSeries, setSelectedSeries] = useState<string>('GPT');
   const [comparisonSeries, setComparisonSeries] = useState<string[]>(['GPT', 'Claude']);
-  const [selectedBenchmark, setSelectedBenchmark] = useState<string>('MMLU_PRO');
+  const [selectedBenchmark] = useState<string>('MMLU_PRO');
   const [showAllTimeline, setShowAllTimeline] = useState<boolean>(false);
-  
-  // Mock data for timeline features
-  const availableSeries = [
-    { series_name: 'GPT', model_count: 12, latest_model: 'GPT-4 Turbo', latest_release: '2024-11-01' },
-    { series_name: 'Claude', model_count: 8, latest_model: 'Claude 3.5 Sonnet', latest_release: '2024-10-15' },
-    { series_name: 'Gemini', model_count: 6, latest_model: 'Gemini Ultra', latest_release: '2024-09-20' },
-    { series_name: 'LLaMA', model_count: 5, latest_model: 'LLaMA 3 70B', latest_release: '2024-08-10' },
-  ];
+  const [availableSeriesList, setAvailableSeriesList] = useState<T.SeriesInfo[]>([]);
+  const [timelineData, setTimelineData] = useState<Record<string, T.TimelineEvent[]>>({});
+  const [benchmarkProgressionData, setBenchmarkProgressionData] = useState<Record<string, any[]>>({});
 
-  const timelineData = {
-    GPT: [
-      {
-        model_name: 'GPT-4 Turbo',
-        release_date: '2024-11-01',
-        overall_score: 85.7,
-        major_improvements: ['컨텍스트 128K', '성능 15% 향상', '멀티모달 강화']
-      },
-      {
-        model_name: 'GPT-4',
-        release_date: '2023-03-14',
-        overall_score: 82.1,
-        major_improvements: ['멀티모달 지원', 'GPT-3.5 대비 40% 성능 향상']
-      },
-      {
-        model_name: 'GPT-3.5 Turbo',
-        release_date: '2022-11-30',
-        overall_score: 75.3,
-        major_improvements: ['속도 개선', '비용 효율성']
-      },
-    ],
-    Claude: [
-      {
-        model_name: 'Claude 3.5 Sonnet',
-        release_date: '2024-10-15',
-        overall_score: 87.3,
-        major_improvements: ['코딩 능력 향상', '추론 강화']
-      },
-      {
-        model_name: 'Claude 3 Opus',
-        release_date: '2024-03-04',
-        overall_score: 84.2,
-        major_improvements: ['멀티모달 지원', '긴 컨텍스트']
-      },
-      {
-        model_name: 'Claude 2.1',
-        release_date: '2023-11-21',
-        overall_score: 78.5,
-        major_improvements: ['200K 토큰 지원', '정확도 향상']
-      },
-    ],
-    Gemini: [
-      {
-        model_name: 'Gemini Ultra',
-        release_date: '2024-09-20',
-        overall_score: 83.4,
-        major_improvements: ['멀티모달 통합', '실시간 처리']
-      },
-      {
-        model_name: 'Gemini Pro',
-        release_date: '2023-12-06',
-        overall_score: 79.8,
-        major_improvements: ['비용 효율성', '다국어 지원']
-      },
-    ],
-    LLaMA: [
-      {
-        model_name: 'LLaMA 3 70B',
-        release_date: '2024-08-10',
-        overall_score: 79.2,
-        major_improvements: ['오픈소스', '효율적 추론']
-      },
-      {
-        model_name: 'LLaMA 2 70B',
-        release_date: '2023-07-18',
-        overall_score: 72.4,
-        major_improvements: ['상업적 사용 가능', '안전성 개선']
-      },
-    ],
+  // Load initial data
+  useEffect(() => {
+    loadModelsAndSeries();
+  }, []);
+
+  // Load models for comparison
+  const loadModelsAndSeries = async () => {
+    setIsLoadingModels(true);
+    try {
+      // Load models
+      const modelsResponse = await modelApi.getModels({ page: 1, limit: 100 });
+      if (modelsResponse.success && modelsResponse.data) {
+        setAvailableModels(modelsResponse.data.items);
+      }
+
+      // Load available series
+      const seriesResponse = await modelApi.getAvailableSeries();
+      if (seriesResponse.success && seriesResponse.data) {
+        setAvailableSeriesList(seriesResponse.data);
+      }
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+    } finally {
+      setIsLoadingModels(false);
+    }
   };
 
-  const benchmarkProgressionData = {
-    GPT: [
-      { model_name: 'GPT-4 Turbo', release_date: '2024-11-01', score: 84.5, improvement_from_previous: 3.2 },
-      { model_name: 'GPT-4', release_date: '2023-03-14', score: 81.3, improvement_from_previous: 7.8 },
-      { model_name: 'GPT-3.5 Turbo', release_date: '2022-11-30', score: 73.5, improvement_from_previous: null },
-    ],
-    Claude: [
-      { model_name: 'Claude 3.5 Sonnet', release_date: '2024-10-15', score: 86.2, improvement_from_previous: 4.1 },
-      { model_name: 'Claude 3 Opus', release_date: '2024-03-04', score: 82.1, improvement_from_previous: 5.3 },
-      { model_name: 'Claude 2.1', release_date: '2023-11-21', score: 76.8, improvement_from_previous: null },
-    ],
+  // Load timeline data for a specific series
+  const loadTimelineData = async (series: string) => {
+    try {
+      const response = await modelApi.getSeriesTimeline(series, 20);
+      if (response.success && response.data) {
+        setTimelineData(prev => ({
+          ...prev,
+          [series]: response.data.timeline
+        }));
+      }
+    } catch (error) {
+      console.error(`Error loading timeline for ${series}:`, error);
+    }
+  };
+
+  // Load benchmark progression data
+  const loadBenchmarkProgression = async (series: string, benchmark: string) => {
+    try {
+      const response = await modelApi.getBenchmarkProgression(series, benchmark);
+      if (response.success && response.data) {
+        setBenchmarkProgressionData(prev => ({
+          ...prev,
+          [series]: response.data.progression
+        }));
+      }
+    } catch (error) {
+      console.error(`Error loading benchmark progression:`, error);
+    }
   };
 
   const getSeriesTimeline = (series: string) => {
-    return timelineData[series as keyof typeof timelineData] || [];
+    return timelineData[series] || [];
   };
 
   const getComparisonTimeline = () => {
-    const allEvents: any[] = [];
+    const allEvents: Array<T.TimelineEvent & { series: string }> = [];
     comparisonSeries.forEach(series => {
       const timeline = getSeriesTimeline(series);
       timeline.forEach(model => {
@@ -196,12 +122,58 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
   };
 
   const getBenchmarkData = () => {
-    const data = benchmarkProgressionData[selectedSeries as keyof typeof benchmarkProgressionData] || [];
+    const data = benchmarkProgressionData[selectedSeries] || [];
     // 과거 -> 최신 순서로 정렬 (왼쪽에서 오른쪽으로 시간이 흐르도록)
     return [...data].reverse();
   };
 
-  const toggleComparisonSeries = (series: string) => {
+  // Get model data from comparison result
+  const getModelData = (modelId: string): T.ComparisonModel | null => {
+    if (!comparisonResult) return null;
+    if (comparisonResult.model_a.model_id === modelId) {
+      return comparisonResult.model_a;
+    }
+    if (comparisonResult.model_b.model_id === modelId) {
+      return comparisonResult.model_b;
+    }
+    return null;
+  };
+
+  // Default recommended models (shown when no search result)
+  const recommendedModels = [
+    {
+      name: 'GPT-4',
+      description: 'OpenAI의 최신 대규모 언어 모델',
+      score: 95,
+      category: '범용',
+      benchmarks: {
+        'MMLU': 86.4,
+        'HumanEval': 67.0,
+      },
+    },
+    {
+      name: 'Claude 3 Opus',
+      description: 'Anthropic의 고성능 AI 모델',
+      score: 93,
+      category: '범용',
+      benchmarks: {
+        'MMLU': 87.0,
+        'HumanEval': 64.0,
+      },
+    },
+    {
+      name: 'Gemini Ultra',
+      description: 'Google의 최고 성능 모델',
+      score: 92,
+      category: '범용',
+      benchmarks: {
+        'MMLU': 83.7,
+        'HumanEval': 62.0,
+      },
+    },
+  ];
+
+  const toggleComparisonSeries = async (series: string) => {
     if (comparisonSeries.includes(series)) {
       if (comparisonSeries.length > 1) {
         setComparisonSeries(comparisonSeries.filter(s => s !== series));
@@ -209,250 +181,91 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
     } else {
       if (comparisonSeries.length < 5) {
         setComparisonSeries([...comparisonSeries, series]);
+        // Load timeline data if not already loaded
+        if (!timelineData[series]) {
+          await loadTimelineData(series);
+        }
       }
     }
   };
 
-  // Mock detailed model data with API structure
-  const detailedModels = [
-    {
-      model_id: 'gpt-4-turbo',
-      model_name: 'GPT-4 Turbo',
-      creator_name: 'OpenAI',
-      overall_score: 85.7,
-      coding_index: 95.2,
-      price_blended_3to1: 17.5,
-      category: 'LLM',
-      benchmarks: {
-        MMLU_PRO: 84.5,
-        HumanEval: 92.3,
-        GSM8K: 88.1,
-        MATH: 79.4,
-      }
-    },
-    {
-      model_id: 'claude-3.5-sonnet',
-      model_name: 'Claude 3.5 Sonnet',
-      creator_name: 'Anthropic',
-      overall_score: 87.3,
-      coding_index: 92.8,
-      price_blended_3to1: 15.0,
-      category: 'LLM',
-      benchmarks: {
-        MMLU_PRO: 86.2,
-        HumanEval: 89.7,
-        GSM8K: 91.5,
-        MATH: 82.3,
-      }
-    },
-    {
-      model_id: 'gemini-ultra',
-      model_name: 'Gemini Ultra',
-      creator_name: 'Google',
-      overall_score: 83.4,
-      coding_index: 88.5,
-      price_blended_3to1: 12.8,
-      category: '멀티모달',
-      benchmarks: {
-        MMLU_PRO: 81.7,
-        HumanEval: 85.2,
-        GSM8K: 86.9,
-        MATH: 75.8,
-      }
-    },
-    {
-      model_id: 'llama-3-70b',
-      model_name: 'LLaMA 3 70B',
-      creator_name: 'Meta',
-      overall_score: 79.2,
-      coding_index: 82.1,
-      price_blended_3to1: 8.5,
-      category: 'LLM',
-      benchmarks: {
-        MMLU_PRO: 78.3,
-        HumanEval: 79.8,
-        GSM8K: 82.4,
-        MATH: 71.2,
-      }
-    },
-  ];
+  // Handle model comparison
+  const handleCompareModels = async () => {
+    if (!modelA || !modelB) return;
 
-  // Recommendation models (keeping for recommend tab)
-  const recommendedModels = [
-    {
-      name: 'GitHub Copilot',
-      category: '코드생성',
-      score: 94,
-      benchmarks: {
-        '코딩 정확도': 95,
-        '속도': 92,
-        '비용 효율': 88,
-      },
-      description: '코드 작성을 위한 최고의 AI 도구',
-    },
-    {
-      name: 'GPT-4 Turbo',
-      category: 'LLM',
-      score: 93,
-      benchmarks: {
-        '이해력': 96,
-        '추론': 94,
-        '창의성': 91,
-      },
-      description: '범용 작업에 최적화된 강력한 LLM',
-    },
-    {
-      name: 'Claude 3 Opus',
-      category: 'LLM',
-      score: 92,
-      benchmarks: {
-        '이해력': 95,
-        '추론': 93,
-        '안전성': 97,
-      },
-      description: '윤리적이고 안전한 AI 어시스턴트',
-    },
-  ];
-
-  const getModelData = (modelId: string) => {
-    return detailedModels.find(m => m.model_id === modelId);
+    setIsComparing(true);
+    setComparisonError(null);
+    try {
+      const response = await modelApi.compareModels(modelA, modelB);
+      if (response.success && response.data) {
+        setComparisonResult(response.data);
+      } else {
+        setComparisonError('모델 비교에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error comparing models:', error);
+      setComparisonError(modelHelpers.extractErrorMessage(error));
+    } finally {
+      setIsComparing(false);
+    }
   };
 
-  const getComparisonData = () => {
-    const dataA = getModelData(modelA);
-    const dataB = getModelData(modelB);
-    
-    if (!dataA || !dataB) return [];
+  // Compare models when both are selected
+  useEffect(() => {
+    if (modelA && modelB && modelA !== modelB) {
+      handleCompareModels();
+    } else {
+      setComparisonResult(null);
+    }
+  }, [modelA, modelB]);
 
-    return Object.keys(dataA.benchmarks).map(key => ({
-      name: key,
-      [dataA.model_name]: dataA.benchmarks[key as keyof typeof dataA.benchmarks],
-      [dataB.model_name]: dataB.benchmarks[key as keyof typeof dataB.benchmarks],
+  // Get comparison chart data from API result
+  const getComparisonData = () => {
+    if (!comparisonResult) return [];
+    const transformed = modelHelpers.transformBenchmarkComparisonForChart(
+      comparisonResult.visual_data.benchmark_comparison
+    );
+    // Transform to use model names as keys
+    return transformed.map(item => ({
+      name: item.name,
+      [comparisonResult.model_a.model_name]: item.modelA,
+      [comparisonResult.model_b.model_name]: item.modelB,
     }));
   };
 
-  // Mock API function for task classification and recommendation
-  const classifyAndRecommend = async (userInput: string): Promise<TaskRecommendationResult> => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Mock response data
-    return {
-      classification: {
-        task_category_id: 3,
-        category_code: 'coding',
-        category_name_ko: '코딩/개발',
-        category_name_en: 'Coding',
-        confidence_score: 0.95,
-        reasoning: `"${userInput}"는 프로그래밍 및 코드 작성과 관련된 작업으로 분류됩니다.`
-      },
-      criteria: {
-        primary_benchmark: 'LiveCodeBench',
-        secondary_benchmark: 'HumanEval',
-        weights: {
-          primary: 0.7,
-          secondary: 0.3
-        }
-      },
-      recommended_models: [
-        {
-          rank: 1,
-          model_id: 'gpt-4-turbo',
-          model_name: 'GPT-4 Turbo',
-          creator_name: 'OpenAI',
-          weighted_score: 94.2,
-          benchmark_scores: {
-            primary: {
-              name: 'LiveCodeBench',
-              score: 72.3,
-              weight: 0.7,
-              contribution: 50.61
-            },
-            secondary: {
-              name: 'HumanEval',
-              score: 92.3,
-              weight: 0.3,
-              contribution: 27.69
-            }
-          },
-          overall_score: 85.7,
-          pricing: {
-            input_price: 10.0,
-            output_price: 30.0
-          }
-        },
-        {
-          rank: 2,
-          model_id: 'claude-3.5-sonnet',
-          model_name: 'Claude 3.5 Sonnet',
-          creator_name: 'Anthropic',
-          weighted_score: 91.8,
-          benchmark_scores: {
-            primary: {
-              name: 'LiveCodeBench',
-              score: 68.5,
-              weight: 0.7,
-              contribution: 47.95
-            },
-            secondary: {
-              name: 'HumanEval',
-              score: 89.7,
-              weight: 0.3,
-              contribution: 26.91
-            }
-          },
-          overall_score: 87.3,
-          pricing: {
-            input_price: 3.0,
-            output_price: 15.0
-          }
-        },
-        {
-          rank: 3,
-          model_id: 'gemini-ultra',
-          model_name: 'Gemini Ultra',
-          creator_name: 'Google',
-          weighted_score: 88.5,
-          benchmark_scores: {
-            primary: {
-              name: 'LiveCodeBench',
-              score: 65.2,
-              weight: 0.7,
-              contribution: 45.64
-            },
-            secondary: {
-              name: 'HumanEval',
-              score: 85.2,
-              weight: 0.3,
-              contribution: 25.56
-            }
-          },
-          overall_score: 83.4,
-          pricing: {
-            input_price: 7.0,
-            output_price: 21.0
-          }
-        }
-      ],
-      metadata: {
-        total_models_evaluated: 5,
-        classification_time_ms: 1250,
-        recommendation_time_ms: 180
-      }
-    };
-  };
+  // Load timeline on series change
+  useEffect(() => {
+    if (selectedSeries && !benchmarkProgressionData[selectedSeries]) {
+      loadBenchmarkProgression(selectedSeries, selectedBenchmark);
+    }
+  }, [selectedSeries, selectedBenchmark]);
 
-  // Handle task search
+  // Load timeline data for comparison series
+  useEffect(() => {
+    comparisonSeries.forEach(series => {
+      if (!timelineData[series]) {
+        loadTimelineData(series);
+      }
+    });
+  }, [comparisonSeries]);
+
+  // Handle task search with real API
   const handleTaskSearch = async () => {
     if (!taskInput.trim()) return;
-    
+
     setIsSearching(true);
+    setSearchError(null);
     try {
-      const result = await classifyAndRecommend(taskInput);
-      setSearchResult(result);
-      setShowSearchResult(true);
+      const response = await modelApi.classifyAndRecommend(taskInput, 5);
+      if (response.success && response.data) {
+        setSearchResult(response.data);
+        setShowSearchResult(true);
+      } else {
+        setSearchError('모델 추천에 실패했습니다.');
+      }
     } catch (error) {
       console.error('Error searching tasks:', error);
+      setSearchError(modelHelpers.extractErrorMessage(error));
     } finally {
       setIsSearching(false);
     }
@@ -482,6 +295,15 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
             <p className="text-xs sm:text-sm text-muted-foreground">
               작업에 최적화된 모델을 찾고 있습니다
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Error Display */}
+      {searchError && !isSearching && (
+        <div className="max-w-4xl mx-auto p-3 sm:p-4">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-sm text-red-800">{searchError}</p>
           </div>
         </div>
       )}
@@ -773,16 +595,26 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                       <SelectValue placeholder="모델 선택" />
                     </SelectTrigger>
                     <SelectContent>
-                      {detailedModels.map((model) => (
-                        <SelectItem 
-                          key={model.model_id} 
-                          value={model.model_id}
-                          disabled={model.model_id === modelB}
-                          className="text-sm"
-                        >
-                          {model.model_name}
-                        </SelectItem>
-                      ))}
+                      {isLoadingModels ? (
+                        <div className="p-2 text-center text-sm text-muted-foreground">
+                          로딩 중...
+                        </div>
+                      ) : availableModels.length === 0 ? (
+                        <div className="p-2 text-center text-sm text-muted-foreground">
+                          모델이 없습니다
+                        </div>
+                      ) : (
+                        availableModels.map((model) => (
+                          <SelectItem
+                            key={model.model_id}
+                            value={model.model_id}
+                            disabled={model.model_id === modelB}
+                            className="text-sm"
+                          >
+                            {model.model_name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -795,16 +627,26 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                       <SelectValue placeholder="모델 선택" />
                     </SelectTrigger>
                     <SelectContent>
-                      {detailedModels.map((model) => (
-                        <SelectItem 
-                          key={model.model_id} 
-                          value={model.model_id}
-                          disabled={model.model_id === modelA}
-                          className="text-sm"
-                        >
-                          {model.model_name}
-                        </SelectItem>
-                      ))}
+                      {isLoadingModels ? (
+                        <div className="p-2 text-center text-sm text-muted-foreground">
+                          로딩 중...
+                        </div>
+                      ) : availableModels.length === 0 ? (
+                        <div className="p-2 text-center text-sm text-muted-foreground">
+                          모델이 없습니다
+                        </div>
+                      ) : (
+                        availableModels.map((model) => (
+                          <SelectItem
+                            key={model.model_id}
+                            value={model.model_id}
+                            disabled={model.model_id === modelA}
+                            className="text-sm"
+                          >
+                            {model.model_name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -812,61 +654,70 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
             </div>
 
             {/* Model Cards Comparison */}
-            {modelA && modelB && (
+            {isComparing && (
+              <div className="bg-white rounded-xl p-6 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">모델 비교 중...</p>
+              </div>
+            )}
+
+            {comparisonError && !isComparing && modelA && modelB && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-sm text-red-800">{comparisonError}</p>
+              </div>
+            )}
+
+            {comparisonResult && !isComparing && (
               <>
                 {/* Model Info Cards - 플랫한 디자인 */}
                 <div className="grid grid-cols-2 gap-2 sm:gap-4">
                   {/* Model A Card */}
-                  {getModelData(modelA) && (
-                    <div className="bg-white rounded-xl overflow-hidden">
-                      <div className="bg-indigo-50 p-3 sm:p-4 border-b-2 border-indigo-200">
-                        <h3 className="text-sm sm:text-base line-clamp-1">{getModelData(modelA)!.model_name}</h3>
-                        <p className="text-xs text-muted-foreground line-clamp-1">{getModelData(modelA)!.creator_name}</p>
-                      </div>
-                      <div className="p-3 sm:p-4">
-                        <div className="space-y-2 sm:space-y-3">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                            <span className="text-xs text-muted-foreground">종합 점수</span>
-                            <Badge variant="default" className="text-xs w-fit">
-                              {getModelData(modelA)!.overall_score}점
-                            </Badge>
-                          </div>
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                            <span className="text-xs text-muted-foreground">카테고리</span>
-                            <Badge variant="outline" className="text-xs w-fit">
-                              {getModelData(modelA)!.category}
-                            </Badge>
-                          </div>
+                  <div className="bg-white rounded-xl overflow-hidden">
+                    <div className="bg-indigo-50 p-3 sm:p-4 border-b-2 border-indigo-200">
+                      <h3 className="text-sm sm:text-base line-clamp-1">{comparisonResult.model_a.model_name}</h3>
+                      <p className="text-xs text-muted-foreground line-clamp-1">{comparisonResult.model_a.creator_name}</p>
+                    </div>
+                    <div className="p-3 sm:p-4">
+                      <div className="space-y-2 sm:space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <span className="text-xs text-muted-foreground">종합 점수</span>
+                          <Badge variant="default" className="text-xs w-fit">
+                            {comparisonResult.model_a.overall_score}점
+                          </Badge>
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <span className="text-xs text-muted-foreground">코딩 지수</span>
+                          <Badge variant="outline" className="text-xs w-fit">
+                            {comparisonResult.model_a.coding_index}점
+                          </Badge>
                         </div>
                       </div>
                     </div>
-                  )}
+                  </div>
 
                   {/* Model B Card */}
-                  {getModelData(modelB) && (
-                    <div className="bg-white rounded-xl overflow-hidden">
-                      <div className="bg-purple-50 p-3 sm:p-4 border-b-2 border-purple-200">
-                        <h3 className="text-sm sm:text-base line-clamp-1">{getModelData(modelB)!.model_name}</h3>
-                        <p className="text-xs text-muted-foreground line-clamp-1">{getModelData(modelB)!.creator_name}</p>
-                      </div>
-                      <div className="p-3 sm:p-4">
-                        <div className="space-y-2 sm:space-y-3">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                            <span className="text-xs text-muted-foreground">종합 점수</span>
-                            <Badge variant="default" className="text-xs w-fit">
-                              {getModelData(modelB)!.overall_score}점
-                            </Badge>
-                          </div>
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                            <span className="text-xs text-muted-foreground">카테고리</span>
-                            <Badge variant="outline" className="text-xs w-fit">
-                              {getModelData(modelB)!.category}
-                            </Badge>
-                          </div>
+                  <div className="bg-white rounded-xl overflow-hidden">
+                    <div className="bg-purple-50 p-3 sm:p-4 border-b-2 border-purple-200">
+                      <h3 className="text-sm sm:text-base line-clamp-1">{comparisonResult.model_b.model_name}</h3>
+                      <p className="text-xs text-muted-foreground line-clamp-1">{comparisonResult.model_b.creator_name}</p>
+                    </div>
+                    <div className="p-3 sm:p-4">
+                      <div className="space-y-2 sm:space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <span className="text-xs text-muted-foreground">종합 점수</span>
+                          <Badge variant="default" className="text-xs w-fit">
+                            {comparisonResult.model_b.overall_score}점
+                          </Badge>
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <span className="text-xs text-muted-foreground">코딩 지수</span>
+                          <Badge variant="outline" className="text-xs w-fit">
+                            {comparisonResult.model_b.coding_index}점
+                          </Badge>
                         </div>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Meta Info Comparison - 플랫한 디자인 */}
@@ -1077,16 +928,15 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                         </tr>
                       </thead>
                       <tbody>
-                        {Object.keys(getModelData(modelA)!.benchmarks).map((benchmark) => {
-                          const modelAData = getModelData(modelA)!;
-                          const modelBData = getModelData(modelB)!;
-                          const scoreA = modelAData.benchmarks[benchmark as keyof typeof modelAData.benchmarks];
-                          const scoreB = modelBData.benchmarks[benchmark as keyof typeof modelBData.benchmarks];
+                        {comparisonResult.visual_data.benchmark_comparison.map((benchmark) => {
+                          const scoreA = benchmark.model_a_score;
+                          const scoreB = benchmark.model_b_score;
                           const diff = (scoreA - scoreB).toFixed(1);
+                          const diffNum = parseFloat(diff);
                           
                           return (
-                            <tr key={benchmark} className="border-b hover:bg-gray-50 transition-colors">
-                              <td className="py-2 px-2 sm:py-3 sm:px-4 text-xs sm:text-sm">{benchmark}</td>
+                            <tr key={benchmark.benchmark_name} className="border-b hover:bg-gray-50 transition-colors">
+                              <td className="py-2 px-2 sm:py-3 sm:px-4 text-xs sm:text-sm">{benchmark.benchmark_name}</td>
                               <td className={`text-center py-2 px-2 sm:py-3 sm:px-4 text-xs sm:text-sm ${scoreA > scoreB ? 'bg-green-50' : ''}`}>
                                 {scoreA}
                               </td>
@@ -1094,8 +944,8 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                                 {scoreB}
                               </td>
                               <td className="text-center py-2 px-2 sm:py-3 sm:px-4">
-                                <Badge variant={scoreA > scoreB ? "default" : scoreB > scoreA ? "secondary" : "outline"} className="text-xs">
-                                  {diff > 0 ? '+' : ''}{diff}
+                                <Badge variant={diffNum > 0 ? "default" : diffNum < 0 ? "secondary" : "outline"} className="text-xs">
+                                  {diffNum > 0 ? '+' : ''}{diff}
                                 </Badge>
                               </td>
                             </tr>
@@ -1120,27 +970,31 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                 비교할 AI 모델 시리즈를 선택하세요 (최대 5개)
               </p>
               <div className="flex flex-wrap gap-2">
-                {availableSeries.map(series => {
-                  const isSelected = comparisonSeries.includes(series.series_name);
-                  const seriesColor = 
-                    series.series_name === 'GPT' ? 'bg-indigo-500' :
-                    series.series_name === 'Claude' ? 'bg-purple-500' :
-                    series.series_name === 'Gemini' ? 'bg-green-500' :
-                    'bg-orange-500';
-                  
-                  return (
-                    <Button
-                      key={series.series_name}
-                      variant={isSelected ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => toggleComparisonSeries(series.series_name)}
-                      className={`text-xs sm:text-sm ${isSelected ? seriesColor : ''}`}
-                    >
-                      {series.series_name}
-                      {isSelected && <span className="ml-1">✓</span>}
-                    </Button>
-                  );
-                })}
+                {availableSeriesList.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">로딩 중...</p>
+                ) : (
+                  availableSeriesList.map(series => {
+                    const isSelected = comparisonSeries.includes(series.series_name);
+                    const seriesColor =
+                      series.series_name === 'GPT' ? 'bg-indigo-500' :
+                      series.series_name === 'Claude' ? 'bg-purple-500' :
+                      series.series_name === 'Gemini' ? 'bg-green-500' :
+                      'bg-orange-500';
+
+                    return (
+                      <Button
+                        key={series.series_name}
+                        variant={isSelected ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => toggleComparisonSeries(series.series_name)}
+                        className={`text-xs sm:text-sm ${isSelected ? seriesColor : ''}`}
+                      >
+                        {series.series_name}
+                        {isSelected && <span className="ml-1">✓</span>}
+                      </Button>
+                    );
+                  })
+                )}
               </div>
             </div>
 

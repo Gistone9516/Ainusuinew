@@ -1,4 +1,3 @@
-import React from 'react';
 import { Home, TrendingUp, MessageSquare, Sparkles, User } from 'lucide-react';
 import type { Page } from '../App';
 

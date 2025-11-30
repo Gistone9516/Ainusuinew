@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { TrendingUp, Briefcase, Newspaper, Activity, BarChart3, Clock, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Minus, Loader2 } from 'lucide-react';
