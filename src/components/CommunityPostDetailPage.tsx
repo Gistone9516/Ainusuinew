@@ -1,33 +1,12 @@
-import { useState } from 'react';
-import { ArrowLeft, ThumbsUp, MessageCircle, MoreVertical, Edit, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, ThumbsUp, MessageCircle, MoreVertical, Edit, Trash2, Loader2 } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import type { Page } from '../App';
-
-interface Comment {
-  id: number;
-  author: string;
-  content: string;
-  date: string;
-  likes: number;
-  isLiked: boolean;
-  isMyComment: boolean;
-}
-
-interface Post {
-  id: number;
-  category: string;
-  title: string;
-  author: string;
-  content: string;
-  likes: number;
-  comments: number;
-  date: string;
-  isHot: boolean;
-  isLiked: boolean;
-  isMyPost: boolean;
-}
+import * as CommunityAPI from '../lib/api/community';
+import * as CommunityHelpers from '../lib/utils/communityHelpers';
+import type { PostDetail, Comment } from '../types/community';
 
 interface CommunityPostDetailPageProps {
   postId: number;
@@ -37,145 +16,142 @@ interface CommunityPostDetailPageProps {
 }
 
 export function CommunityPostDetailPage({ postId, onNavigate: _onNavigate, onBack, onEdit }: CommunityPostDetailPageProps) {
-  // Mock post data
-  const [post, setPost] = useState<Post>({
-    id: postId,
-    category: 'prompt',
-    title: 'GPT-4로 블로그 글 자동 생성하는 프롬프트 공유합니다',
-    author: '프롬프트마스터',
-    content: `안녕하세요! 오늘은 GPT-4를 활용해서 블로그 글을 자동으로 생성하는 프롬프트를 공유하려고 합니다.
-
-저는 이 프롬프트를 사용해서 매주 2-3개의 블로그 포스팅을 자동으로 작성하고 있는데요, 정말 효율적이더라고요.
-
-**프롬프트:**
-"주제: [주제 입력]
-독자: [타겟 독자]
-톤앤매너: 전문적이면서도 친근하게
-분량: 1500-2000자
-구성: 서론-본론-결론, 각 섹션에 소제목 포함
-SEO 키워드: [키워드 3개]
-
-위 조건으로 블로그 글을 작성해주세요."
-
-이렇게 사용하시면 됩니다. 도움이 되셨으면 좋겠습니다!`,
-    likes: 42,
-    comments: 15,
-    date: '2시간 전',
-    isHot: true,
-    isLiked: false,
-    isMyPost: true,
-  });
-
-  const [comments, setComments] = useState<Comment[]>([
-    {
-      id: 1,
-      author: 'AI초보자',
-      content: '와 정말 유용한 프롬프트네요! 바로 써봐야겠습니다. 감사합니다!',
-      date: '1시간 전',
-      likes: 5,
-      isLiked: false,
-      isMyComment: false,
-    },
-    {
-      id: 2,
-      author: '블로거김',
-      content: '저도 비슷하게 사용하고 있는데, SEO 키워드 부분이 특히 좋은 것 같아요.',
-      date: '50분 전',
-      likes: 3,
-      isLiked: true,
-      isMyComment: false,
-    },
-    {
-      id: 3,
-      author: '작가박',
-      content: '혹시 GPT-3.5로도 비슷한 퀄리티가 나올까요?',
-      date: '30분 전',
-      likes: 1,
-      isLiked: false,
-      isMyComment: true,
-    },
-  ]);
-
+  const [post, setPost] = useState<PostDetail | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
-  const [editingCommentContent, setEditingCommentContent] = useState('');
   const [showPostMenu, setShowPostMenu] = useState(false);
   const [showCommentMenu, setShowCommentMenu] = useState<number | null>(null);
 
-  const getCategoryBadge = (category: string) => {
-    const categoryMap: Record<string, string> = {
-      prompt: '프롬프트',
-      daily: '일상',
-      qna: '질문',
-      review: '후기',
-      notice: '공지',
-    };
-    return categoryMap[category] || category;
+  // Loading states
+  const [isLoadingPost, setIsLoadingPost] = useState(false);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 게시글 및 댓글 조회
+  useEffect(() => {
+    fetchPost();
+    fetchComments();
+  }, [postId]);
+
+  const fetchPost = async () => {
+    setIsLoadingPost(true);
+    setError(null);
+    try {
+      const response = await CommunityAPI.getPostDetail(postId);
+      setPost(response.data);
+    } catch (err: any) {
+      console.error('Failed to fetch post:', err);
+      setError('게시글을 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoadingPost(false);
+    }
   };
 
-  const handleLikePost = () => {
+  const fetchComments = async () => {
+    setIsLoadingComments(true);
+    try {
+      const response = await CommunityAPI.getComments(postId, {
+        page: 1,
+        limit: 50,
+      });
+      setComments(response.data.items);
+    } catch (err: any) {
+      console.error('Failed to fetch comments:', err);
+    } finally {
+      setIsLoadingComments(false);
+    }
+  };
+
+  const handleLikePost = async () => {
+    if (!post) return;
+
+    // 낙관적 업데이트
+    const prevLiked = post.is_liked;
+    const prevCount = post.likes_count;
+
     setPost({
       ...post,
-      isLiked: !post.isLiked,
-      likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+      is_liked: !post.is_liked,
+      likes_count: post.is_liked ? post.likes_count - 1 : post.likes_count + 1,
     });
-  };
 
-  const handleLikeComment = (commentId: number) => {
-    setComments(comments.map((comment: Comment) => 
-      comment.id === commentId
-        ? { ...comment, isLiked: !comment.isLiked, likes: comment.isLiked ? comment.likes - 1 : comment.likes + 1 }
-        : comment
-    ));
-  };
-
-  const handleAddComment = () => {
-    if (!newComment.trim()) return;
-    
-    const comment: Comment = {
-      id: Date.now(),
-      author: '나',
-      content: newComment,
-      date: '방금 전',
-      likes: 0,
-      isLiked: false,
-      isMyComment: true,
-    };
-    
-    setComments([...comments, comment]);
-    setNewComment('');
-    setPost({ ...post, comments: post.comments + 1 });
-  };
-
-  const handleStartEditComment = (comment: Comment) => {
-    setEditingCommentId(comment.id);
-    setEditingCommentContent(comment.content);
-    setShowCommentMenu(null);
-  };
-
-  const handleSaveEditComment = (commentId: number) => {
-    setComments(comments.map((comment: Comment) =>
-      comment.id === commentId
-        ? { ...comment, content: editingCommentContent }
-        : comment
-    ));
-    setEditingCommentId(null);
-    setEditingCommentContent('');
-  };
-
-  const handleDeleteComment = (commentId: number) => {
-    if (confirm('댓글을 삭제하시겠습니까?')) {
-      setComments(comments.filter((comment: Comment) => comment.id !== commentId));
-      setPost({ ...post, comments: post.comments - 1 });
-      setShowCommentMenu(null);
+    try {
+      await CommunityAPI.togglePostLike(postId);
+    } catch (err: any) {
+      console.error('Failed to toggle like:', err);
+      // 실패 시 롤백
+      setPost({
+        ...post,
+        is_liked: prevLiked,
+        likes_count: prevCount,
+      });
     }
   };
 
-  const handleDeletePost = () => {
-    if (confirm('게시글을 삭제하시겠습니까?')) {
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !post) return;
+
+    setIsSubmittingComment(true);
+    try {
+      const response = await CommunityAPI.createComment(postId, newComment);
+      setComments([...comments, response.data]);
+      setNewComment('');
+      setPost({ ...post, comments_count: post.comments_count + 1 });
+    } catch (err: any) {
+      console.error('Failed to create comment:', err);
+      alert('댓글 작성에 실패했습니다.');
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  const handleDeletePost = async () => {
+    if (!confirm('게시글을 삭제하시겠습니까?')) return;
+
+    try {
+      await CommunityAPI.deletePost(postId);
       onBack();
+    } catch (err: any) {
+      console.error('Failed to delete post:', err);
+      alert('게시글 삭제에 실패했습니다.');
     }
   };
+
+  const isMyPost = post ? CommunityHelpers.isMyContent(post.author.user_id) : false;
+
+  if (isLoadingPost) {
+    return (
+      <div className="min-h-screen bg-gray-50 pb-20 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+
+  if (error || !post) {
+    return (
+      <div className="min-h-screen bg-gray-50 pb-20">
+        <div className="bg-white border-b sticky top-0 z-10">
+          <div className="flex items-center justify-between p-4">
+            <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+        <div className="p-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-600 text-sm">{error || '게시글을 찾을 수 없습니다.'}</p>
+            <button
+              onClick={fetchPost}
+              className="mt-2 text-sm text-indigo-600 hover:text-indigo-700"
+            >
+              다시 시도
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -185,9 +161,9 @@ SEO 키워드: [키워드 3개]
           <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          {post.isMyPost && (
+          {isMyPost && (
             <div className="relative">
-              <button 
+              <button
                 onClick={() => setShowPostMenu(!showPostMenu)}
                 className="p-2 hover:bg-gray-100 rounded-full"
               >
@@ -198,7 +174,7 @@ SEO 키워드: [키워드 3개]
                   <button
                     onClick={() => {
                       setShowPostMenu(false);
-                      onEdit(post.id);
+                      onEdit(post.post_id);
                     }}
                     className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2"
                   >
@@ -223,18 +199,17 @@ SEO 키워드: [키워드 3개]
       <div className="bg-white border-b">
         <div className="p-4">
           <div className="flex items-center gap-2 mb-3">
-            <Badge variant="outline" className="text-xs">{getCategoryBadge(post.category)}</Badge>
-            {post.isHot && (
+            {CommunityHelpers.isHotPost(post) && (
               <Badge variant="destructive" className="text-xs">HOT</Badge>
             )}
           </div>
-          
+
           <h1 className="mb-4">{post.title}</h1>
-          
+
           <div className="flex items-center gap-3 text-sm text-muted-foreground mb-4">
-            <span>{post.author}</span>
+            <span>{post.author.nickname}</span>
             <span>·</span>
-            <span>{post.date}</span>
+            <span>{CommunityHelpers.formatRelativeTime(post.created_at)}</span>
           </div>
 
           <div className="whitespace-pre-wrap mb-6 leading-relaxed">
@@ -245,17 +220,17 @@ SEO 키워드: [키워드 3개]
             <button
               onClick={handleLikePost}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                post.isLiked 
-                  ? 'bg-indigo-50 text-indigo-600' 
+                post.is_liked
+                  ? 'bg-indigo-50 text-indigo-600'
                   : 'bg-gray-100 hover:bg-gray-200'
               }`}
             >
-              <ThumbsUp className={`h-4 w-4 ${post.isLiked ? 'fill-current' : ''}`} />
-              <span>{post.likes}</span>
+              <ThumbsUp className={`h-4 w-4 ${post.is_liked ? 'fill-current' : ''}`} />
+              <span>{post.likes_count}</span>
             </button>
             <div className="flex items-center gap-2 text-muted-foreground">
               <MessageCircle className="h-4 w-4" />
-              <span>{post.comments}</span>
+              <span>{post.comments_count}</span>
             </div>
           </div>
         </div>
@@ -267,89 +242,73 @@ SEO 키워드: [키워드 3개]
           <h3>댓글 {comments.length}</h3>
         </div>
 
-        <div>
-          {comments.map((comment, index) => (
-            <div 
-              key={comment.id}
-              className={`px-4 py-4 ${index !== comments.length - 1 ? 'border-b' : ''}`}
-            >
-              {editingCommentId === comment.id ? (
-                <div className="space-y-2">
-                  <Textarea
-                    value={editingCommentContent}
-                    onChange={(e) => setEditingCommentContent(e.target.value)}
-                    className="min-h-[80px]"
-                  />
-                  <div className="flex gap-2">
-                    <Button 
-                      size="sm"
-                      onClick={() => handleSaveEditComment(comment.id)}
-                    >
-                      저장
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => {
-                        setEditingCommentId(null);
-                        setEditingCommentContent('');
-                      }}
-                    >
-                      취소
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{comment.author}</span>
-                      <span className="text-xs text-muted-foreground">{comment.date}</span>
-                    </div>
-                    {comment.isMyComment && (
-                      <div className="relative">
-                        <button
-                          onClick={() => setShowCommentMenu(showCommentMenu === comment.id ? null : comment.id)}
-                          className="p-1 hover:bg-gray-100 rounded"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-                        {showCommentMenu === comment.id && (
-                          <div className="absolute right-0 mt-1 w-24 bg-white border rounded-lg shadow-lg z-10">
-                            <button
-                              onClick={() => handleStartEditComment(comment)}
-                              className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <Edit className="h-3 w-3" />
-                              수정
-                            </button>
-                            <button
-                              onClick={() => handleDeleteComment(comment.id)}
-                              className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-red-600"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              삭제
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-sm mb-2">{comment.content}</p>
-                  <button
-                    onClick={() => handleLikeComment(comment.id)}
-                    className={`flex items-center gap-1 text-xs ${
-                      comment.isLiked ? 'text-indigo-600' : 'text-muted-foreground'
-                    }`}
+        {isLoadingComments ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+          </div>
+        ) : (
+          <div>
+            {comments.length === 0 ? (
+              <div className="py-8 text-center text-gray-500 text-sm">
+                첫 댓글을 작성해보세요!
+              </div>
+            ) : (
+              comments.map((comment, index) => {
+                const isMyComment = CommunityHelpers.isMyContent(comment.author.user_id);
+                return (
+                  <div
+                    key={comment.comment_id}
+                    className={`px-4 py-4 ${index !== comments.length - 1 ? 'border-b' : ''}`}
                   >
-                    <ThumbsUp className={`h-3 w-3 ${comment.isLiked ? 'fill-current' : ''}`} />
-                    <span>{comment.likes}</span>
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{comment.author.nickname}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {CommunityHelpers.formatRelativeTime(comment.created_at)}
+                        </span>
+                      </div>
+                      {isMyComment && (
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowCommentMenu(showCommentMenu === comment.comment_id ? null : comment.comment_id)}
+                            className="p-1 hover:bg-gray-100 rounded"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                          {showCommentMenu === comment.comment_id && (
+                            <div className="absolute right-0 mt-1 w-24 bg-white border rounded-lg shadow-lg z-10">
+                              <button
+                                onClick={() => {
+                                  setShowCommentMenu(null);
+                                  alert('댓글 수정 기능은 준비 중입니다.');
+                                }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <Edit className="h-3 w-3" />
+                                수정
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowCommentMenu(null);
+                                  alert('댓글 삭제 기능은 준비 중입니다.');
+                                }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-red-600"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                삭제
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm mb-2">{comment.content}</p>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
       {/* Comment Input */}
@@ -361,12 +320,12 @@ SEO 키워드: [키워드 3개]
             placeholder="댓글을 입력하세요..."
             className="flex-1 min-h-[44px] max-h-[120px] resize-none"
           />
-          <Button 
+          <Button
             onClick={handleAddComment}
-            disabled={!newComment.trim()}
+            disabled={!newComment.trim() || isSubmittingComment}
             className="self-end"
           >
-            작성
+            {isSubmittingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : '작성'}
           </Button>
         </div>
       </div>
