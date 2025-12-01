@@ -191,6 +191,7 @@ export const compareModels = async (
       },
     }
   );
+  console.log('[ModelAPI] compareModels response:', JSON.stringify(data, null, 2));
   return data;
 };
 

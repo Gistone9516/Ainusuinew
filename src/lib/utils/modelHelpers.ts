@@ -129,34 +129,60 @@ export const calculateBlendedPrice = (
  * 벤치마크 비교 데이터를 차트용으로 변환
  */
 export const transformBenchmarkComparisonForChart = (
-  benchmarks: T.BenchmarkComparison[]
+  benchmarks: any[] | undefined | null
 ): Array<{
   name: string;
   modelA: number;
   modelB: number;
 }> => {
-  return benchmarks.map((b) => ({
-    name: b.benchmark_name,
-    modelA: b.model_a_score,
-    modelB: b.model_b_score,
-  }));
+  if (!benchmarks || !Array.isArray(benchmarks)) return [];
+  
+  return benchmarks
+    .filter(b => b && typeof b === 'object')
+    .map((b) => {
+      // 다양한 키 이름 지원 (API 응답 불일치 대응)
+      const name = b.benchmark_name || b.name || b.benchmark || b.category || 'Unknown';
+      
+      // Model A 점수 추출
+      let modelA = 0;
+      if (typeof b.model_a_score === 'number') modelA = b.model_a_score;
+      else if (typeof b.model_a === 'number') modelA = b.model_a;
+      else if (typeof b.score_a === 'number') modelA = b.score_a;
+      else if (typeof b.modelA === 'number') modelA = b.modelA;
+      else if (typeof b.scoreA === 'number') modelA = b.scoreA;
+      else if (typeof b.score === 'number') modelA = b.score; // 단일 점수일 경우
+
+      // Model B 점수 추출
+      let modelB = 0;
+      if (typeof b.model_b_score === 'number') modelB = b.model_b_score;
+      else if (typeof b.model_b === 'number') modelB = b.model_b;
+      else if (typeof b.score_b === 'number') modelB = b.score_b;
+      else if (typeof b.modelB === 'number') modelB = b.modelB;
+      else if (typeof b.scoreB === 'number') modelB = b.scoreB;
+
+      return { name, modelA, modelB };
+    });
 };
 
 /**
  * 타임라인 데이터를 차트용으로 변환
  */
 export const transformTimelineForChart = (
-  timeline: T.TimelineEvent[]
+  timeline: T.TimelineEvent[] | undefined | null
 ): Array<{
   date: string;
   score: number;
   modelName: string;
 }> => {
-  return timeline.map((event) => ({
-    date: formatDateShort(event.release_date),
-    score: event.overall_score,
-    modelName: event.model_name,
-  }));
+  if (!timeline || !Array.isArray(timeline)) return [];
+
+  return timeline
+    .filter(event => event && typeof event === 'object')
+    .map((event) => ({
+      date: formatDateShort(event.release_date || new Date().toISOString()),
+      score: typeof event.overall_score === 'number' ? event.overall_score : 0,
+      modelName: event.model_name || 'Unknown',
+    }));
 };
 
 /**

@@ -13,6 +13,7 @@ import {
   ChevronRight,
   BarChart3,
   ArrowUp,
+  ArrowDown,
   Loader2,
 } from "lucide-react";
 import type { UserData, Page } from "../App";
@@ -20,12 +21,29 @@ import { useState, useEffect, type UIEvent } from "react";
 import { AppHeader } from "./AppHeader";
 import { motion } from "framer-motion";
 import * as IssueAPI from '../lib/api/issues';
-import type { CurrentIssueIndex } from '../types/issue';
+import * as ModelAPI from '../lib/api/models';
+import type { CurrentIssueIndex, ClusterSnapshot } from '../types/issue';
 
 interface HomePageProps {
   userData: UserData;
   onNavigate: (page: Page) => void;
   onSelectCluster: (cluster: any) => void;
+}
+
+// 상위 모델 타입 정의
+interface TopModel {
+  name: string;
+  score: number;
+  category: string;
+}
+
+// 뉴스 타입 정의
+interface TopNews {
+  title: string;
+  tags: string[];
+  score: number;
+  date: string;
+  articles?: number;
 }
 
 export function HomePage({
@@ -37,41 +55,21 @@ export function HomePage({
 
   // API State
   const [currentIndex, setCurrentIndex] = useState<CurrentIssueIndex | null>(null);
+  const [topModels, setTopModels] = useState<TopModel[]>([]);
+  const [topNews, setTopNews] = useState<TopNews[]>([]);
+  const [clusters, setClusters] = useState<ClusterSnapshot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [isLoadingNews, setIsLoadingNews] = useState(false);
 
-  // API 호출
-  useEffect(() => {
-    const fetchCurrentIndex = async () => {
-      console.log('[HomePage] Starting API call...');
-      setIsLoading(true);
-      try {
-        console.log('[HomePage] Calling IssueAPI.getCurrentIssueIndex()...');
-        const response = await IssueAPI.getCurrentIssueIndex();
-        console.log('[HomePage] API Response:', response);
-        setCurrentIndex(response.data);
-      } catch (err: any) {
-        console.error('[HomePage] API Error:', err);
-        console.error('[HomePage] Error message:', err?.message);
-        console.error('[HomePage] Error response:', err?.response);
-        alert(`API 오류: ${err?.message || '알 수 없는 오류'}`);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    console.log('[HomePage] useEffect triggered, calling fetchCurrentIndex...');
-    fetchCurrentIndex();
-  }, []);
-
-  // Mock data (폴백용)
-  const issueIndex = currentIndex?.overall_index ?? 72;
-  const topModels = [
+  // 폴백 데이터
+  const fallbackModels: TopModel[] = [
     { name: "GPT-4 Turbo", score: 95, category: "대화형 AI" },
     { name: "Claude 3 Opus", score: 93, category: "대화형 AI" },
     { name: "Gemini Ultra", score: 91, category: "멀티모달" },
   ];
 
-  const topNews = [
+  const fallbackNews: TopNews[] = [
     {
       title: "OpenAI, GPT-5 개발 본격화... 성능 대폭 향상 전망",
       tags: ["LLM", "모델출시", "기술트렌드"],
@@ -79,7 +77,7 @@ export function HomePage({
       date: "2025-11-21",
     },
     {
-      title: "AI 규제 법안 국회 통과... 개발자들 우려 ��명",
+      title: "AI 규제 법안 국회 통과... 개발자들 우려 표명",
       tags: ["AI규제", "AI윤리", "AI일자리"],
       score: 85,
       date: "2025-11-20",
@@ -91,6 +89,83 @@ export function HomePage({
       date: "2025-11-20",
     },
   ];
+
+  // 이슈 지수 및 클러스터 API 호출
+  useEffect(() => {
+    const fetchCurrentIndex = async () => {
+      console.log('[HomePage] Starting API call...');
+      setIsLoading(true);
+      try {
+        const response = await IssueAPI.getCurrentIssueIndex();
+        console.log('[HomePage] API Response:', response);
+        setCurrentIndex(response.data);
+
+        // 클러스터 데이터도 함께 로드
+        if (response.data?.collected_at) {
+          fetchClusters(response.data.collected_at);
+        }
+      } catch (err: any) {
+        console.error('[HomePage] API Error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCurrentIndex();
+  }, []);
+
+  // 클러스터(뉴스) 데이터 로드
+  const fetchClusters = async (collectedAt: string) => {
+    setIsLoadingNews(true);
+    try {
+      const response = await IssueAPI.getClusterSnapshot(collectedAt);
+      if (response.data && response.data.length > 0) {
+        setClusters(response.data);
+        // 클러스터를 뉴스 형식으로 변환 (상위 3개)
+        const newsData = response.data.slice(0, 3).map((cluster) => ({
+          title: cluster.topic_name,
+          tags: cluster.tags.slice(0, 3),
+          score: cluster.cluster_score,
+          date: new Date().toISOString().split('T')[0],
+          articles: cluster.article_count,
+        }));
+        setTopNews(newsData);
+      }
+    } catch (err: any) {
+      console.error('[HomePage] Cluster fetch error:', err);
+    } finally {
+      setIsLoadingNews(false);
+    }
+  };
+
+  // 상위 모델 API 호출
+  useEffect(() => {
+    const fetchTopModels = async () => {
+      setIsLoadingModels(true);
+      try {
+        const response = await ModelAPI.getTopModelsByCategory('overall', 3);
+        if (response.success && response.data && response.data.length > 0) {
+          const models = response.data.map((model) => ({
+            name: model.model_name,
+            score: Math.round(model.score),
+            category: model.creator_name || '범용 AI',
+          }));
+          setTopModels(models);
+        }
+      } catch (err: any) {
+        console.error('[HomePage] Top models fetch error:', err);
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+
+    fetchTopModels();
+  }, []);
+
+  // 실제 데이터 또는 폴백 데이터 사용
+  const issueIndex = currentIndex?.overall_index ?? 72;
+  const displayModels = topModels.length > 0 ? topModels : fallbackModels;
+  const displayNews = topNews.length > 0 ? topNews : fallbackNews;
 
   const getIndexColor = (index: number) => {
     if (index >= 75) return "text-red-600";
@@ -248,41 +323,47 @@ export function HomePage({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {topModels.map((model, index) => (
-                    <div
-                      key={model.name}
-                      className="flex items-center justify-between p-4 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {/* Gold, Silver, Bronze circles with numbers */}
-                        <div
-                          className={`flex items-center justify-center w-10 h-10 rounded-full ${
-                            index === 0
-                              ? "bg-yellow-400 text-white"
-                              : index === 1
-                                ? "bg-gray-400 text-white"
-                                : "bg-orange-400 text-white"
-                          }`}
-                        >
-                          {index + 1}
-                        </div>
-                        <div>
-                          <div className="text-sm">
-                            {model.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {model.category}
-                          </div>
-                        </div>
-                      </div>
-                      <Badge
-                        variant="secondary"
-                        className="text-sm px-3 py-1"
-                      >
-                        {model.score}점
-                      </Badge>
+                  {isLoadingModels ? (
+                    <div className="flex items-center justify-center p-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                     </div>
-                  ))}
+                  ) : (
+                    displayModels.map((model, index) => (
+                      <div
+                        key={model.name}
+                        className="flex items-center justify-between p-4 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Gold, Silver, Bronze circles with numbers */}
+                          <div
+                            className={`flex items-center justify-center w-10 h-10 rounded-full ${
+                              index === 0
+                                ? "bg-yellow-400 text-white"
+                                : index === 1
+                                  ? "bg-gray-400 text-white"
+                                  : "bg-orange-400 text-white"
+                            }`}
+                          >
+                            {index + 1}
+                          </div>
+                          <div>
+                            <div className="text-sm">
+                              {model.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {model.category}
+                            </div>
+                          </div>
+                        </div>
+                        <Badge
+                          variant="secondary"
+                          className="text-sm px-3 py-1"
+                        >
+                          {model.score}점
+                        </Badge>
+                      </div>
+                    ))
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -302,46 +383,52 @@ export function HomePage({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {topNews.map((news, index) => (
-                    <div
-                      key={index}
-                      className="p-3 rounded-lg border hover:border-indigo-300 transition-colors cursor-pointer bg-white"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectCluster({
-                          title: news.title,
-                          tags: news.tags,
-                          score: news.score,
-                          articles: 5,
-                          createdAt: news.date,
-                          updatedAt: news.date
-                        });
-                      }}
-                    >
-                      <div className="flex items-start justify-between mb-1.5">
-                        <h3 className="flex-1 pr-4 text-sm">
-                          {news.title}
-                        </h3>
-                        <Badge variant="outline" className="text-xs">
-                          {news.score}점
-                        </Badge>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 mb-1.5">
-                        {news.tags.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {news.date}
-                      </div>
+                  {isLoadingNews ? (
+                    <div className="flex items-center justify-center p-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                     </div>
-                  ))}
+                  ) : (
+                    displayNews.map((news, index) => (
+                      <div
+                        key={index}
+                        className="p-3 rounded-lg border hover:border-indigo-300 transition-colors cursor-pointer bg-white"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectCluster({
+                            title: news.title,
+                            tags: news.tags,
+                            score: news.score,
+                            articles: news.articles || 5,
+                            createdAt: news.date,
+                            updatedAt: news.date
+                          });
+                        }}
+                      >
+                        <div className="flex items-start justify-between mb-1.5">
+                          <h3 className="flex-1 pr-4 text-sm">
+                            {news.title}
+                          </h3>
+                          <Badge variant="outline" className="text-xs">
+                            {news.score}점
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mb-1.5">
+                          {news.tags.map((tag) => (
+                            <Badge
+                              key={tag}
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {news.date}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </CardContent>
               </Card>
             </div>

@@ -25,7 +25,7 @@ src/
 `.env` 파일에 API 서버 주소를 설정하세요:
 
 ```bash
-VITE_API_BASE_URL=http://localhost:3000/api/v1
+VITE_API_BASE_URL=http://localhost:3000/api
 ```
 
 ### 2. 의존성 설치
@@ -203,7 +203,7 @@ initiateOAuthLogin('naver');
 
 ## 🎯 API 엔드포인트
 
-모든 API는 `/api/v1` 프리픽스를 사용합니다:
+모든 API는 `/api` 프리픽스를 사용합니다:
 
 - `POST /auth/register` - 회원가입
 - `GET /auth/check-email` - 이메일 중복 확인
@@ -280,7 +280,7 @@ npm run dev
 `.env` 파일을 수정하세요:
 
 ```bash
-VITE_API_BASE_URL=https://api.yourdomain.com/api/v1
+VITE_API_BASE_URL=https://api.yourdomain.com/api
 ```
 
 ### OAuth 제공자 추가/제거

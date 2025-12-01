@@ -28,6 +28,8 @@ export interface UserData {
   email?: string;
   gender?: string;
   job?: string;
+  job_category_code?: string;
+  job_category_id?: number;
   tags?: string[];
 }
 

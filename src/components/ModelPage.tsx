@@ -46,9 +46,20 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
   const [timelineData, setTimelineData] = useState<Record<string, T.TimelineEvent[]>>({});
   const [benchmarkProgressionData, setBenchmarkProgressionData] = useState<Record<string, any[]>>({});
 
+  // Job-based recommendation states
+  const [jobRecommendedModels, setJobRecommendedModels] = useState<Array<{
+    name: string;
+    description: string;
+    score: number;
+    category: string;
+    benchmarks: Record<string, number>;
+  }>>([]);
+  const [isLoadingJobRecommendations, setIsLoadingJobRecommendations] = useState(false);
+
   // Load initial data
   useEffect(() => {
     loadModelsAndSeries();
+    loadJobBasedRecommendations();
   }, []);
 
   // Load models for comparison
@@ -70,6 +81,48 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
       console.error('Error loading initial data:', error);
     } finally {
       setIsLoadingModels(false);
+    }
+  };
+
+  // Load job-based model recommendations
+  const loadJobBasedRecommendations = async () => {
+    setIsLoadingJobRecommendations(true);
+    try {
+      // 사용자 직업 정보가 있으면 해당 직업 기반 추천
+      const jobCode = userData.job_category_code;
+      const jobId = userData.job_category_id;
+      
+      // job_category_code 또는 job_category_id가 없으면 API 호출 건너뜀 (fallback 사용)
+      if (!jobCode && !jobId) {
+        console.log('[ModelPage] No job category info, using fallback models');
+        setIsLoadingJobRecommendations(false);
+        return;
+      }
+      
+      const response = await modelApi.getModelsByJobCategory({
+        job_category_code: jobCode,
+        job_category_id: jobId,
+        limit: 3,
+      });
+      
+      if (response.success && response.data?.recommended_models) {
+        const models = response.data.recommended_models.map((model) => ({
+          name: model.model_name,
+          description: `${model.creator_name}의 AI 모델`,
+          score: Math.round(model.overall_score),
+          category: response.data.job_category?.job_name || '범용',
+          benchmarks: {
+            '종합': model.overall_score,
+            '코딩': model.coding_index || 0,
+          },
+        }));
+        setJobRecommendedModels(models);
+      }
+    } catch (error) {
+      console.error('Error loading job-based recommendations:', error);
+      // 에러 발생 시 fallback 모델 사용 (기본값 유지)
+    } finally {
+      setIsLoadingJobRecommendations(false);
     }
   };
 
@@ -103,26 +156,32 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
     }
   };
 
-  const getSeriesTimeline = (series: string) => {
-    return timelineData[series] || [];
+  const getSeriesTimeline = (series: string): T.TimelineEvent[] => {
+    const timeline = timelineData[series];
+    if (!timeline || !Array.isArray(timeline)) return [];
+    return timeline;
   };
 
   const getComparisonTimeline = () => {
     const allEvents: Array<T.TimelineEvent & { series: string }> = [];
+    if (!comparisonSeries || !Array.isArray(comparisonSeries)) return allEvents;
     comparisonSeries.forEach(series => {
       const timeline = getSeriesTimeline(series);
       timeline.forEach(model => {
-        allEvents.push({
-          ...model,
-          series,
-        });
+        if (model) {
+          allEvents.push({
+            ...model,
+            series,
+          });
+        }
       });
     });
     return allEvents.sort((a, b) => new Date(b.release_date).getTime() - new Date(a.release_date).getTime());
   };
 
   const getBenchmarkData = () => {
-    const data = benchmarkProgressionData[selectedSeries] || [];
+    const data = benchmarkProgressionData[selectedSeries];
+    if (!data || !Array.isArray(data)) return [];
     // 과거 -> 최신 순서로 정렬 (왼쪽에서 오른쪽으로 시간이 흐르도록)
     return [...data].reverse();
   };
@@ -139,8 +198,8 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
     return null;
   };
 
-  // Default recommended models (shown when no search result)
-  const recommendedModels = [
+  // Default recommended models (fallback when API data not available)
+  const fallbackModels = [
     {
       name: 'GPT-4',
       description: 'OpenAI의 최신 대규모 언어 모델',
@@ -172,6 +231,9 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
       },
     },
   ];
+
+  // Use API data or fallback
+  const recommendedModels = jobRecommendedModels.length > 0 ? jobRecommendedModels : fallbackModels;
 
   const toggleComparisonSeries = async (series: string) => {
     if (comparisonSeries.includes(series)) {
@@ -221,15 +283,24 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
 
   // Get comparison chart data from API result
   const getComparisonData = () => {
-    if (!comparisonResult) return [];
+    // comparisonResult가 없거나 visual_data가 없으면 빈 배열 반환
+    if (!comparisonResult?.visual_data?.benchmark_comparison) {
+      console.log('[ModelPage] No benchmark data found:', comparisonResult);
+      return [];
+    }
+
+    // 헬퍼 함수를 통해 안전하게 변환 (배열 검사 및 null 체크 포함됨)
     const transformed = modelHelpers.transformBenchmarkComparisonForChart(
       comparisonResult.visual_data.benchmark_comparison
     );
-    // Transform to use model names as keys
+    
+    if (!transformed || !Array.isArray(transformed)) return [];
+
+    // Transform to use fixed keys for chart safety
     return transformed.map(item => ({
-      name: item.name,
-      [comparisonResult.model_a.model_name]: item.modelA,
-      [comparisonResult.model_b.model_name]: item.modelB,
+      name: item.name || 'Unknown',
+      scoreA: typeof item.modelA === 'number' ? item.modelA : 0,
+      scoreB: typeof item.modelB === 'number' ? item.modelB : 0,
     }));
   };
 
@@ -417,7 +488,7 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
               </p>
               
               <div className="space-y-3">
-                {searchResult.recommended_models.map((model, index) => (
+                {(searchResult.recommended_models || []).map((model, index) => (
                   <motion.div
                     key={model.model_id}
                     initial={{ opacity: 0, y: 20 }}
@@ -540,6 +611,11 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground mb-4">벤치마크 기준 특화 모델 3개</p>
               
+              {isLoadingJobRecommendations ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+                </div>
+              ) : (
               <div className="space-y-3">
                 {recommendedModels.map((model, index) => (
                   <div
@@ -573,6 +649,7 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           </TabsContent>
 
@@ -897,12 +974,14 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                         iconSize={10}
                       />
                       <Bar 
-                        dataKey={getModelData(modelA)!.model_name} 
+                        dataKey="scoreA" 
+                        name={getModelData(modelA)!.model_name}
                         fill="#818cf8" 
                         radius={[4, 4, 0, 0]}
                       />
                       <Bar 
-                        dataKey={getModelData(modelB)!.model_name} 
+                        dataKey="scoreB" 
+                        name={getModelData(modelB)!.model_name}
                         fill="#c084fc" 
                         radius={[4, 4, 0, 0]}
                       />
@@ -928,29 +1007,30 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                         </tr>
                       </thead>
                       <tbody>
-                        {comparisonResult.visual_data.benchmark_comparison.map((benchmark) => {
-                          const scoreA = benchmark.model_a_score;
-                          const scoreB = benchmark.model_b_score;
-                          const diff = (scoreA - scoreB).toFixed(1);
-                          const diffNum = parseFloat(diff);
-                          
-                          return (
-                            <tr key={benchmark.benchmark_name} className="border-b hover:bg-gray-50 transition-colors">
-                              <td className="py-2 px-2 sm:py-3 sm:px-4 text-xs sm:text-sm">{benchmark.benchmark_name}</td>
-                              <td className={`text-center py-2 px-2 sm:py-3 sm:px-4 text-xs sm:text-sm ${scoreA > scoreB ? 'bg-green-50' : ''}`}>
-                                {scoreA}
-                              </td>
-                              <td className={`text-center py-2 px-2 sm:py-3 sm:px-4 text-xs sm:text-sm ${scoreB > scoreA ? 'bg-green-50' : ''}`}>
-                                {scoreB}
-                              </td>
-                              <td className="text-center py-2 px-2 sm:py-3 sm:px-4">
-                                <Badge variant={diffNum > 0 ? "default" : diffNum < 0 ? "secondary" : "outline"} className="text-xs">
-                                  {diffNum > 0 ? '+' : ''}{diff}
-                                </Badge>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {getComparisonData().map((benchmark) => {
+                            const scoreA = benchmark.scoreA;
+                            const scoreB = benchmark.scoreB;
+                            const diff = (scoreA - scoreB).toFixed(1);
+                            const diffNum = parseFloat(diff);
+                            const benchmarkName = benchmark.name;
+                            
+                            return (
+                              <tr key={benchmarkName} className="border-b hover:bg-gray-50 transition-colors">
+                                <td className="py-2 px-2 sm:py-3 sm:px-4 text-xs sm:text-sm">{benchmarkName}</td>
+                                <td className={`text-center py-2 px-2 sm:py-3 sm:px-4 text-xs sm:text-sm ${scoreA > scoreB ? 'bg-green-50' : ''}`}>
+                                  {scoreA}
+                                </td>
+                                <td className={`text-center py-2 px-2 sm:py-3 sm:px-4 text-xs sm:text-sm ${scoreB > scoreA ? 'bg-green-50' : ''}`}>
+                                  {scoreB}
+                                </td>
+                                <td className="text-center py-2 px-2 sm:py-3 sm:px-4">
+                                  <Badge variant={diffNum > 0 ? "default" : diffNum < 0 ? "secondary" : "outline"} className="text-xs">
+                                    {diffNum > 0 ? '+' : ''}{diff}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>
@@ -1059,7 +1139,7 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                             </Badge>
                           </div>
                           <div className="space-y-1">
-                            {model.major_improvements.map((improvement: string, idx: number) => (
+                            {(model.major_improvements || []).map((improvement: string, idx: number) => (
                               <div key={idx} className="flex items-start gap-1.5">
                                 <div className="w-1 h-1 rounded-full bg-current mt-1.5 shrink-0" />
                                 <p className="text-xs flex-1">{improvement}</p>

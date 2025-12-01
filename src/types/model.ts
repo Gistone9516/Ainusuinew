@@ -315,7 +315,15 @@ export interface JobRecommendationResponse {
     job_name: string;
     category_code: string;
   };
-  recommendations: JobRecommendation[];
+  criteria?: {
+    primary_benchmark: string;
+    secondary_benchmark: string;
+    weights: {
+      primary: number;
+      secondary: number;
+    };
+  };
+  recommended_models: JobRecommendation[];  // API 응답은 recommended_models
 }
 
 // ==================== API Response 타입 ====================

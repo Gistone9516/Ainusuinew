@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { ArrowLeft, ExternalLink, Calendar, Tag } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Calendar, Tag, AlertCircle, RefreshCw } from 'lucide-react';
 import type { Page } from '../App';
 import * as IssueAPI from '../lib/api/issues';
 import * as IssueHelpers from '../lib/utils/issueHelpers';
@@ -36,63 +36,57 @@ export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: Is
   // collected_at 추출 (cluster에서 또는 현재 시간 사용)
   const collectedAt = cluster.collected_at || new Date().toISOString();
 
+  // 기사 데이터가 없을 때 표시할 상태
+  const [noArticles, setNoArticles] = useState(false);
+
   useEffect(() => {
     const fetchArticles = async () => {
       setLoading(true);
       setError(null);
+      setNoArticles(false);
+
+      // 디버깅: 전달된 클러스터 데이터 확인
+      console.log('[IssueDetailPage] Cluster data:', {
+        title: cluster.title,
+        collected_at: cluster.collected_at,
+        article_indices: cluster.article_indices,
+        article_indices_length: cluster.article_indices?.length,
+      });
 
       try {
-        // cluster에 article_indices가 있는 경우 (ClusterSnapshot 타입)
+        // cluster에 article_indices가 있는 경우
         if (cluster.article_indices && cluster.article_indices.length > 0) {
           // 페이지네이션을 위한 인덱스 계산
           const start = (currentPage - 1) * articlesPerPage;
           const end = start + articlesPerPage;
           const pageIndices = cluster.article_indices.slice(start, end);
 
+          console.log('[IssueDetailPage] Fetching articles:', {
+            collectedAt,
+            pageIndices,
+            start,
+            end,
+          });
+
           // API 호출
           const response = await IssueAPI.getArticles(collectedAt, pageIndices);
-          setArticles(response.data);
+          
+          console.log('[IssueDetailPage] Articles response:', response);
+          
+          if (response.data && response.data.length > 0) {
+            setArticles(response.data);
+          } else {
+            setArticles([]);
+            setNoArticles(true);
+          }
         } else {
-          // article_indices가 없는 경우 Mock 데이터 사용
-          const mockArticles: Article[] = [
-            {
-              article_index: 0,
-              title: 'OpenAI, GPT-5 개발 중단 발표',
-              link: 'https://news.example.com/article/123',
-              description: 'OpenAI가 GPT-5 개발을 중단한다고 발표했습니다. 이는 AI 안전성에 대한 우려가 반영된 결정으로 보입니다...',
-              pub_date: '2025-01-01T12:30:00.000Z',
-              source: 'naver'
-            },
-            {
-              article_index: 1,
-              title: 'GPT-5 개발 중단, 업계 반응은?',
-              link: 'https://news.example.com/article/124',
-              description: 'OpenAI의 GPT-5 개발 중단 소식에 AI 업계가 다양한 반응을 보이고 있습니다. 전문가들은 이번 결정이 AI 윤리와 안전성을 중시하는 흐름이라고 평가합니다...',
-              pub_date: '2025-01-01T13:15:00.000Z',
-              source: 'daum'
-            },
-            {
-              article_index: 2,
-              title: 'AI 안전성 강화 움직임 확산',
-              link: 'https://news.example.com/article/125',
-              description: 'OpenAI의 GPT-5 개발 중단을 계기로 AI 업계 전반에 안전성 강화 움직임이 확산되고 있습니다. 다른 AI 기업들도 유사한 조치를 고려 중인 것으로 알려졌습니다...',
-              pub_date: '2025-01-01T14:00:00.000Z',
-              source: 'naver'
-            },
-            {
-              article_index: 3,
-              title: 'GPT-4 개선 버전 출시 예정',
-              link: 'https://news.example.com/article/126',
-              description: 'OpenAI는 GPT-5 대신 GPT-4의 개선 버전을 출시할 계획이라고 밝혔습니다. 안전성과 성능을 모두 개선한 모델이 될 것으로 기대됩니다...',
-              pub_date: '2025-01-01T15:20:00.000Z',
-              source: 'google'
-            },
-          ];
-
-          setArticles(mockArticles.slice(0, Math.min(cluster.articles, 10)));
+          // article_indices가 없는 경우 - 기사 데이터 없음
+          console.log('[IssueDetailPage] No article_indices in cluster');
+          setArticles([]);
+          setNoArticles(true);
         }
       } catch (err: any) {
-        console.error('Failed to fetch articles:', err);
+        console.error('[IssueDetailPage] Failed to fetch articles:', err);
         setError(err.response?.data?.message || '기사를 불러오는데 실패했습니다.');
       } finally {
         setLoading(false);
@@ -101,6 +95,15 @@ export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: Is
 
     fetchArticles();
   }, [cluster, currentPage, collectedAt]);
+
+  // 재시도 핸들러
+  const handleRetry = () => {
+    setError(null);
+    setNoArticles(false);
+    setLoading(true);
+    // useEffect가 다시 트리거되도록
+    setCurrentPage(currentPage);
+  };
 
   // 총 페이지 수 계산
   const totalPages = cluster.article_indices
@@ -184,6 +187,7 @@ export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: Is
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* 로딩 상태 */}
             {loading ? (
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
@@ -194,7 +198,37 @@ export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: Is
                   </div>
                 ))}
               </div>
+            ) : error ? (
+              /* 에러 상태 */
+              <div className="flex flex-col items-center justify-center py-8 text-center bg-red-50 rounded-lg">
+                <AlertCircle className="h-10 w-10 text-red-400 mb-3" />
+                <p className="text-red-600 font-medium">{error}</p>
+                <button
+                  onClick={handleRetry}
+                  className="mt-3 flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  다시 시도
+                </button>
+              </div>
+            ) : noArticles || articles.length === 0 ? (
+              /* 데이터 없음 상태 */
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <AlertCircle className="h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-gray-600 font-medium">관련 기사 데이터가 없습니다</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  이 클러스터에 연결된 기사 정보를 찾을 수 없습니다.
+                </p>
+                <button
+                  onClick={handleRetry}
+                  className="mt-4 flex items-center gap-2 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  다시 시도
+                </button>
+              </div>
             ) : (
+              /* 기사 목록 */
               <div className="space-y-4">
                 {articles.map((article) => (
                   <div
@@ -227,13 +261,6 @@ export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: Is
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {/* Error Display */}
-            {error && (
-              <div className="p-4 bg-red-50 text-red-600 rounded-lg text-sm">
-                {error}
               </div>
             )}
 

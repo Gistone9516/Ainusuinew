@@ -126,8 +126,56 @@ export const JOB_CATEGORIES = [
 
 export type JobCategory = typeof JOB_CATEGORIES[number];
 
+// ==================== API Response Metadata 타입 ====================
+
+export interface HistoryMetadata {
+  requested_start: string;
+  requested_end: string;
+  actual_count: number;
+  missing_dates: string[];
+}
+
+export interface ClusterMetadata {
+  collected_at: string;
+  total_clusters: number;
+  active_count: number;
+  inactive_count: number;
+  message?: string;
+}
+
+export interface DataAvailability {
+  oldest_date: string;
+  latest_date: string;
+  total_snapshots: number;
+  collection_frequency: string;
+  available_dates?: string[];
+}
+
+export interface CurrentIndexMetadata {
+  data_availability: DataAvailability;
+}
+
 // ==================== API Response 타입 ====================
 
+export interface CurrentIssueIndexResponseWithMeta {
+  success: boolean;
+  data: CurrentIssueIndex;
+  metadata?: CurrentIndexMetadata;
+}
+
+export interface IssueIndexHistoryResponseWithMeta {
+  success: boolean;
+  data: IssueIndexHistoryItem[];
+  metadata?: HistoryMetadata;
+}
+
+export interface ClusterSnapshotResponseWithMeta {
+  success: boolean;
+  data: ClusterSnapshot[];
+  metadata?: ClusterMetadata;
+}
+
+// 하위 호환성을 위한 기존 타입 유지
 export type CurrentIssueIndexResponse = ApiResponse<CurrentIssueIndex>;
 export type IssueIndexHistoryResponse = ApiResponse<IssueIndexHistoryItem[]>;
 export type ClusterSnapshotResponse = ApiResponse<ClusterSnapshot[]>;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { TrendingUp, Briefcase, Newspaper, Activity, BarChart3, Clock, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Minus, Loader2 } from 'lucide-react';
+import { TrendingUp, Briefcase, Newspaper, Activity, BarChart3, Clock, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Minus, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import type { UserData, Page } from '../App';
 import { AppHeader } from './AppHeader';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -12,7 +12,9 @@ import type {
   CurrentIssueIndex,
   IssueIndexHistoryItem,
   JobIssueIndex,
-  ClusterSnapshot
+  ClusterSnapshot,
+  HistoryMetadata,
+  ClusterMetadata
 } from '../types/issue';
 
 interface IssuePageProps {
@@ -34,9 +36,25 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
   const [allJobIndices, setAllJobIndices] = useState<JobIssueIndex[]>([]);
   const [clusters, setClusters] = useState<ClusterSnapshot[]>([]);
 
+  // Metadata State (데이터 가용성 정보)
+  const [historyMetadata, setHistoryMetadata] = useState<HistoryMetadata | null>(null);
+  const [clusterMetadata, setClusterMetadata] = useState<ClusterMetadata | null>(null);
+
   // Loading States
+  const [isLoadingCurrent, setIsLoadingCurrent] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [isLoadingClusters, setIsLoadingClusters] = useState(false);
+
+  // Error States
+  const [currentError, setCurrentError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [clustersError, setClustersError] = useState<string | null>(null);
+
+  // Data availability
+  const [hasCurrentData, setHasCurrentData] = useState(true);
+  const [hasHistoryData, setHasHistoryData] = useState(true);
+  const [hasClustersData, setHasClustersData] = useState(true);
 
   // 스크롤 핸들러 (메인 화면 방식)
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -58,87 +76,7 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
     }
   };
 
-  // Mock data (차트용 폴백 데이터)
-  // 7일 추이 데이터
-  const trend7Days = [
-    { date: '11/18', index: 65, clusters: 6 },
-    { date: '11/19', index: 68, clusters: 7 },
-    { date: '11/20', index: 70, clusters: 7 },
-    { date: '11/21', index: 69, clusters: 8 },
-    { date: '11/22', index: 71, clusters: 9 },
-    { date: '11/23', index: '73', clusters: 8 },
-    { date: '11/24', index: 72, clusters: 8 },
-  ];
-
-  // 30일 추이 데이터
-  const trend30Days = [
-    { date: '10/25', index: 58 },
-    { date: '10/28', index: 62 },
-    { date: '10/31', index: 65 },
-    { date: '11/03', index: 63 },
-    { date: '11/06', index: 67 },
-    { date: '11/09', index: 70 },
-    { date: '11/12', index: 68 },
-    { date: '11/15', index: 66 },
-    { date: '11/18', index: 65 },
-    { date: '11/21', index: 69 },
-    { date: '11/24', index: 72 },
-  ];
-
-  // 시간대별 데이터 (24시간)
-  const hourlyData = [
-    { hour: '00:00', index: 68 },
-    { hour: '03:00', index: 67 },
-    { hour: '06:00', index: 69 },
-    { hour: '09:00', index: 71 },
-    { hour: '12:00', index: 73 },
-    { hour: '15:00', index: 72 },
-    { hour: '18:00', index: 74 },
-    { hour: '21:00', index: 72 },
-  ];
-
-  const jobIndexes = [
-    { job: '기술/개발', index: 85, trend: 'up', change: 5.2 },
-    { job: '의료/과학', index: 78, trend: 'up', change: 3.1 },
-    { job: '교육', index: 65, trend: 'down', change: -2.5 },
-    { job: '비즈니스', index: 70, trend: 'up', change: 1.8 },
-    { job: '창작/콘텐츠', index: 68, trend: 'stable', change: 0.3 },
-  ];
-
-  const newsClusters = [
-    {
-      title: 'OpenAI, GPT-5 개발 본격화',
-      tags: ['LLM', '모델출시', '기술트렌드', 'AI성능', 'AI일자리'],
-      score: 89,
-      articles: 24,
-      createdAt: '2025-11-20',
-      updatedAt: '2025-11-21',
-    },
-    {
-      title: 'AI 규제 법안 논의 가속화',
-      tags: ['AI규제', 'AI윤리', 'AI일자리', '기술트렌드', '의사결정지원'],
-      score: 85,
-      articles: 18,
-      createdAt: '2025-11-19',
-      updatedAt: '2025-11-21',
-    },
-    {
-      title: '의료 AI 진단 시스템 확산',
-      tags: ['의료진단', '컴퓨터비전', 'AI성능', '데이터분석', '자동화'],
-      score: 82,
-      articles: 15,
-      createdAt: '2025-11-18',
-      updatedAt: '2025-11-20',
-    },
-    {
-      title: '코드 생성 AI 업무 효율화',
-      tags: ['코드생성', 'LLM', '업무효율화', '자동화', '기술트렌드'],
-      score: 76,
-      articles: 12,
-      createdAt: '2025-11-17',
-      updatedAt: '2025-11-20',
-    },
-  ];
+  // Mock 데이터 제거 - 실제 API 데이터만 사용
 
   const getIndexColor = (index: number) => {
     if (index >= 75) return 'text-red-600';
@@ -162,27 +100,50 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
 
   // 현재 이슈 지수 조회
   const fetchCurrentIndex = async () => {
+    setIsLoadingCurrent(true);
+    setCurrentError(null);
     try {
       const response = await IssueAPI.getCurrentIssueIndex();
-      setCurrentIndex(response.data);
-
-      // 현재 지수 로드 후 클러스터도 자동 로드
-      if (response.data.collected_at) {
+      
+      if (response.success && response.data && response.data.collected_at) {
+        setCurrentIndex(response.data);
+        setHasCurrentData(true);
+        // 현재 지수 로드 후 클러스터도 자동 로드
         fetchClusters(response.data.collected_at);
+      } else {
+        setHasCurrentData(false);
+        setCurrentIndex(null);
       }
     } catch (err: any) {
       console.error('Failed to fetch current index:', err);
+      setCurrentError('현재 이슈 지수를 불러오는데 실패했습니다.');
+      setHasCurrentData(false);
+    } finally {
+      setIsLoadingCurrent(false);
     }
   };
 
-  // 히스토리 데이터 조회
+  // 히스토리 데이터 조회 (범위 조회 API 사용)
   const fetchHistoryData = async (range: '7d' | '30d') => {
+    setIsLoadingHistory(true);
+    setHistoryError(null);
     try {
       const days = range === '7d' ? 7 : 30;
-      const data = await IssueAPI.getRecentIssueIndices(days);
-      setHistoryData(data);
+      const result = await IssueAPI.getRecentIssueIndices(days);
+      
+      setHistoryData(result.data);
+      setHistoryMetadata(result.metadata || null);
+      setHasHistoryData(result.hasData);
+      
+      if (!result.hasData && result.metadata?.missing_dates) {
+        console.log('[IssuePage] No history data. Missing dates:', result.metadata.missing_dates);
+      }
     } catch (err: any) {
       console.error('Failed to fetch history:', err);
+      setHistoryError('히스토리 데이터를 불러오는데 실패했습니다.');
+      setHasHistoryData(false);
+    } finally {
+      setIsLoadingHistory(false);
     }
   };
 
@@ -191,7 +152,7 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
     setIsLoadingJobs(true);
     try {
       const response = await IssueAPI.getAllJobIndices();
-      setAllJobIndices(response.jobs);
+      setAllJobIndices(response.jobs || []);
     } catch (err: any) {
       console.error('Failed to fetch job indices:', err);
     } finally {
@@ -199,17 +160,33 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
     }
   };
 
-  // 클러스터 조회
+  // 클러스터 조회 (에러 처리 강화)
   const fetchClusters = async (collectedAt: string) => {
     setIsLoadingClusters(true);
+    setClustersError(null);
     try {
       const response = await IssueAPI.getClusterSnapshot(collectedAt);
-      setClusters(response.data);
+      
+      setClusters(response.data || []);
+      setClusterMetadata(response.metadata || null);
+      setHasClustersData(response.data && response.data.length > 0);
+      
+      if (!response.success) {
+        setClustersError(response.metadata?.message || '클러스터를 불러오는데 실패했습니다.');
+      }
     } catch (err: any) {
       console.error('Failed to fetch clusters:', err);
+      setClustersError('클러스터를 불러오는데 실패했습니다.');
+      setHasClustersData(false);
     } finally {
       setIsLoadingClusters(false);
     }
+  };
+
+  // 데이터 새로고침
+  const handleRefresh = () => {
+    fetchCurrentIndex();
+    fetchHistoryData(trendPeriod);
   };
 
   // ==================== useEffect Hooks ====================
@@ -234,57 +211,116 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
 
   // ==================== Computed Values ====================
 
-  // 차트 데이터 변환
+  // 안전한 숫자 변환 헬퍼
+  const toSafeNumber = (value: unknown, defaultValue: number = 0): number => {
+    if (value === null || value === undefined) return defaultValue;
+    const num = Number(value);
+    return isNaN(num) ? defaultValue : num;
+  };
+
+  // 차트 데이터 변환 (숫자 타입 보장)
   const chartData = useMemo(() => {
     if (historyData.length === 0) return [];
     return historyData.map((item) => ({
       date: IssueHelpers.formatShortDate(item.collected_at),
-      index: item.overall_index,
-      clusters: item.active_clusters_count,
+      index: toSafeNumber(item.overall_index),
+      clusters: toSafeNumber(item.active_clusters_count),
     }));
   }, [historyData]);
 
-  // 24시간 데이터 (최근 데이터에서 필터링)
+  // 24시간 데이터 (최근 데이터에서 필터링, 숫자 타입 보장)
   const hourlyChartData = useMemo(() => {
     const last24Hours = IssueHelpers.filter24HoursData(historyData);
     return last24Hours.map((item) => ({
       hour: IssueHelpers.formatTime(item.collected_at),
-      index: item.overall_index,
+      index: toSafeNumber(item.overall_index),
     }));
   }, [historyData]);
 
-  // 실제 데이터와 Mock 데이터 병합
-  const integratedIndex = currentIndex?.overall_index ?? 72;
-  const previousDayIndex = historyData.length > 1 ? historyData[historyData.length - 2]?.overall_index : 69;
+  // 실제 데이터 사용 (더 이상 Mock 데이터 사용 안함)
+  const integratedIndex = toSafeNumber(currentIndex?.overall_index, 0);
+  const previousDayIndex = historyData.length > 1 
+    ? toSafeNumber(historyData[historyData.length - 2]?.overall_index, integratedIndex) 
+    : integratedIndex;
   const indexChange = integratedIndex - previousDayIndex;
-  const activeClusters = currentIndex?.active_clusters_count ?? 8;
-  const totalArticles = currentIndex?.total_articles_analyzed ?? 1247;
+  const activeClusters = toSafeNumber(currentIndex?.active_clusters_count, 0);
+  const totalArticles = toSafeNumber(currentIndex?.total_articles_analyzed, 0);
 
-  // 차트에 사용할 데이터 (실제 데이터가 있으면 사용, 없으면 Mock)
-  const trendData = chartData.length > 0 ? chartData : (trendPeriod === '7d' ? trend7Days : trend30Days);
-  const hourlyDisplayData = hourlyChartData.length > 0 ? hourlyChartData : hourlyData;
+  // 차트에 사용할 데이터 (실제 데이터만 사용)
+  const trendData = chartData;
+  const hourlyDisplayData = hourlyChartData;
 
-  // 직업별 지수 (실제 데이터가 있으면 사용, 없으면 Mock)
-  const jobDisplayData = allJobIndices.length > 0
-    ? allJobIndices.map((job) => ({
-        job: job.job_category,
-        index: job.issue_index,
-        trend: 'stable' as const,
-        change: 0,
-      }))
-    : jobIndexes;
+  // 직업별 지수 (실제 데이터만 사용)
+  const jobDisplayData = allJobIndices.map((job) => ({
+    job: job.job_category,
+    index: job.issue_index,
+    trend: 'stable' as const,
+    change: 0,
+  }));
 
-  // 뉴스 클러스터 (실제 데이터가 있으면 사용, 없으면 Mock)
-  const newsDisplayData = clusters.length > 0
-    ? clusters.map((cluster) => ({
-        title: cluster.topic_name,
-        tags: cluster.tags,
-        score: cluster.cluster_score,
-        articles: cluster.article_count,
-        createdAt: IssueHelpers.formatDate(cluster.appearance_count.toString()),
-        updatedAt: IssueHelpers.formatDate(cluster.appearance_count.toString()),
-      }))
-    : newsClusters;
+  // 뉴스 클러스터 (실제 데이터만 사용)
+  const newsDisplayData = clusters.map((cluster) => ({
+    title: cluster.topic_name,
+    tags: cluster.tags,
+    score: cluster.cluster_score,
+    articles: cluster.article_count,
+    createdAt: IssueHelpers.formatDate(cluster.appearance_count.toString()),
+    updatedAt: IssueHelpers.formatDate(cluster.appearance_count.toString()),
+    cluster_id: cluster.cluster_id,
+    collected_at: currentIndex?.collected_at,
+    article_indices: cluster.article_indices,
+  }));
+
+  // 데이터 없음 표시 컴포넌트
+  const NoDataMessage = ({ 
+    message, 
+    subMessage,
+    onRetry 
+  }: { 
+    message: string; 
+    subMessage?: string;
+    onRetry?: () => void;
+  }) => (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <AlertCircle className="h-12 w-12 text-gray-400 mb-4" />
+      <p className="text-gray-600 font-medium">{message}</p>
+      {subMessage && (
+        <p className="text-sm text-gray-400 mt-1">{subMessage}</p>
+      )}
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className="mt-4 flex items-center gap-2 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+        >
+          <RefreshCw className="h-4 w-4" />
+          다시 시도
+        </button>
+      )}
+    </div>
+  );
+
+  // 에러 표시 컴포넌트
+  const ErrorMessage = ({ 
+    message, 
+    onRetry 
+  }: { 
+    message: string; 
+    onRetry?: () => void;
+  }) => (
+    <div className="flex flex-col items-center justify-center py-8 text-center bg-red-50 rounded-lg">
+      <AlertCircle className="h-10 w-10 text-red-400 mb-3" />
+      <p className="text-red-600 font-medium">{message}</p>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className="mt-3 flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+        >
+          <RefreshCw className="h-4 w-4" />
+          다시 시도
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="min-h-screen pb-20 bg-gray-50">
@@ -305,6 +341,31 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
           <TabsContent value="integrated" className="space-y-4">
             {/* 네이티브 스크롤 캐러셀 */}
             <div className="bg-white rounded-xl p-4 pb-12 relative">
+              {/* 로딩 상태 */}
+              {isLoadingCurrent && (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+                  <span className="ml-2 text-gray-600">데이터 로딩 중...</span>
+                </div>
+              )}
+
+              {/* 에러 상태 */}
+              {!isLoadingCurrent && currentError && (
+                <ErrorMessage message={currentError} onRetry={handleRefresh} />
+              )}
+
+              {/* 데이터 없음 상태 */}
+              {!isLoadingCurrent && !currentError && !hasCurrentData && (
+                <NoDataMessage 
+                  message="현재 이슈 지수 데이터가 없습니다"
+                  subMessage="아직 수집된 데이터가 없거나 서버와의 연결이 원활하지 않습니다."
+                  onRetry={handleRefresh}
+                />
+              )}
+
+              {/* 데이터 있을 때 */}
+              {!isLoadingCurrent && !currentError && hasCurrentData && (
+              <>
               <div 
                 id="issue-carousel-container"
                 className="overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide"
@@ -325,7 +386,7 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                         <div className="text-center p-3 rounded-lg bg-gray-50">
                           <Activity className="h-4 w-4 text-indigo-600 mx-auto mb-1" />
                           <div className={`text-2xl ${getIndexColor(integratedIndex)}`}>
-                            {integratedIndex}
+                            {integratedIndex.toFixed(1)}
                           </div>
                           <div className="text-xs text-muted-foreground mt-1">현재 지수</div>
                         </div>
@@ -338,7 +399,7 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                         
                         <div className="text-center p-3 rounded-lg bg-gray-50">
                           <Newspaper className="h-4 w-4 text-indigo-600 mx-auto mb-1" />
-                          <div className="text-2xl">{(totalArticles / 1000).toFixed(1)}k</div>
+                          <div className="text-2xl">{totalArticles >= 1000 ? `${(totalArticles / 1000).toFixed(1)}k` : totalArticles}</div>
                           <div className="text-xs text-muted-foreground mt-1">분석 기사</div>
                         </div>
                       </div>
@@ -373,7 +434,7 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.5, delay: 0.5 }}
                           >
-                            {integratedIndex}
+                            {integratedIndex.toFixed(1)}
                           </motion.div>
                           <div className="text-sm text-muted-foreground mt-1" style={{ fontWeight: '700' }}>
                             {getIndexLabel(integratedIndex)} 단계
@@ -381,10 +442,12 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                         </div>
                         
                         {/* 전일 대비 변화 */}
+                        {historyData.length > 1 && (
                         <div className={`flex items-center justify-center gap-1 text-sm ${indexChange >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                           {indexChange >= 0 ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
                           <span>전일 대비 {Math.abs(indexChange).toFixed(1)}점</span>
                         </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -418,66 +481,95 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                         </div>
                       </div>
 
-                      <ResponsiveContainer width="100%" height={280}>
-                        <AreaChart
-                          data={trendData}
-                          margin={{ top: 5, right: 5, left: -30, bottom: 5 }}
-                        >
-                          <defs>
-                            <linearGradient id="colorIndex" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis 
-                            dataKey="date" 
-                            tick={{ fontSize: 11 }}
-                            stroke="#999"
-                          />
-                          <YAxis 
-                            domain={[0, 100]} 
-                            tick={{ fontSize: 11 }}
-                            stroke="#999"
-                          />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '8px',
-                              fontSize: '12px'
-                            }} 
-                          />
-                          <Area 
-                            type="monotone" 
-                            dataKey="index" 
-                            stroke="#818cf8" 
-                            strokeWidth={2}
-                            fill="url(#colorIndex)" 
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
+                      {/* 히스토리 로딩 상태 */}
+                      {isLoadingHistory && (
+                        <div className="flex items-center justify-center h-[280px]">
+                          <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                        </div>
+                      )}
 
-                      <div className="grid grid-cols-3 gap-2 text-sm">
-                        <div className="p-3 rounded-lg bg-gray-50 text-center">
-                          <div className="text-muted-foreground text-xs mb-1">최저</div>
-                          <div className="text-green-600">
-                            {trendData.length > 0 ? Math.min(...trendData.map(d => typeof d.index === 'number' ? d.index : Number(d.index))) : '-'}
-                          </div>
+                      {/* 히스토리 데이터 없음 */}
+                      {!isLoadingHistory && trendData.length === 0 && (
+                        <div className="flex flex-col items-center justify-center h-[280px] text-center">
+                          <AlertCircle className="h-10 w-10 text-gray-300 mb-2" />
+                          <p className="text-gray-500 text-sm">
+                            {historyMetadata?.missing_dates && historyMetadata.missing_dates.length > 0
+                              ? `선택한 기간에 데이터가 없습니다`
+                              : '히스토리 데이터가 없습니다'}
+                          </p>
+                          {historyMetadata?.actual_count !== undefined && (
+                            <p className="text-gray-400 text-xs mt-1">
+                              조회된 데이터: {historyMetadata.actual_count}건
+                            </p>
+                          )}
                         </div>
-                        <div className="p-3 rounded-lg bg-gray-50 text-center">
-                          <div className="text-muted-foreground text-xs mb-1">평균</div>
-                          <div className="text-gray-700">
-                            {trendData.length > 0 ? Math.round(trendData.reduce((total, d) => total + (typeof d.index === 'number' ? d.index : Number(d.index)), 0) / trendData.length) : '-'}
+                      )}
+
+                      {/* 차트 표시 */}
+                      {!isLoadingHistory && trendData.length > 0 && (
+                        <>
+                          <ResponsiveContainer width="100%" height={280}>
+                            <AreaChart
+                              data={trendData}
+                              margin={{ top: 5, right: 5, left: -30, bottom: 5 }}
+                            >
+                              <defs>
+                                <linearGradient id="colorIndex" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3}/>
+                                  <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                              <XAxis 
+                                dataKey="date" 
+                                tick={{ fontSize: 11 }}
+                                stroke="#999"
+                              />
+                              <YAxis 
+                                domain={[0, 100]} 
+                                tick={{ fontSize: 11 }}
+                                stroke="#999"
+                              />
+                              <Tooltip 
+                                contentStyle={{ 
+                                  backgroundColor: 'white', 
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '8px',
+                                  fontSize: '12px'
+                                }} 
+                              />
+                              <Area 
+                                type="monotone" 
+                                dataKey="index" 
+                                stroke="#818cf8" 
+                                strokeWidth={2}
+                                fill="url(#colorIndex)" 
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+
+                          <div className="grid grid-cols-3 gap-2 text-sm">
+                            <div className="p-3 rounded-lg bg-gray-50 text-center">
+                              <div className="text-muted-foreground text-xs mb-1">최저</div>
+                              <div className="text-green-600">
+                                {Math.min(...trendData.map(d => d.index)).toFixed(1)}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-gray-50 text-center">
+                              <div className="text-muted-foreground text-xs mb-1">평균</div>
+                              <div className="text-gray-700">
+                                {(trendData.reduce((total, d) => total + d.index, 0) / trendData.length).toFixed(1)}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-gray-50 text-center">
+                              <div className="text-muted-foreground text-xs mb-1">최고</div>
+                              <div className="text-red-600">
+                                {Math.max(...trendData.map(d => d.index)).toFixed(1)}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="p-3 rounded-lg bg-gray-50 text-center">
-                          <div className="text-muted-foreground text-xs mb-1">최고</div>
-                          <div className="text-red-600">
-                            {trendData.length > 0 ? Math.max(...trendData.map(d => typeof d.index === 'number' ? d.index : Number(d.index))) : '-'}
-                          </div>
-                        </div>
-                      </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -489,56 +581,88 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                         <h2 className="text-lg">24시간 지수 변화</h2>
                       </div>
 
-                      <ResponsiveContainer width="100%" height={280}>
-                        <BarChart
-                          data={hourlyDisplayData}
-                          margin={{ top: 5, right: 5, left: -30, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis 
-                            dataKey="hour" 
-                            tick={{ fontSize: 10 }}
-                            stroke="#999"
-                          />
-                          <YAxis 
-                            domain={[0, 100]} 
-                            tick={{ fontSize: 10 }}
-                            stroke="#999"
-                          />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '8px',
-                              fontSize: '12px'
-                            }} 
-                          />
-                          <Bar 
-                            dataKey="index" 
-                            fill="#818cf8" 
-                            radius={[4, 4, 0, 0]}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
+                      {/* 24시간 데이터 없음 */}
+                      {hourlyDisplayData.length === 0 && (
+                        <div className="flex flex-col items-center justify-center h-[280px] text-center">
+                          <AlertCircle className="h-10 w-10 text-gray-300 mb-2" />
+                          <p className="text-gray-500 text-sm">24시간 데이터가 없습니다</p>
+                          <p className="text-gray-400 text-xs mt-1">
+                            데이터 수집 후 표시됩니다
+                          </p>
+                        </div>
+                      )}
 
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="p-3 rounded-lg bg-gray-50">
-                          <div className="text-muted-foreground text-xs mb-1">가장 높았던 시간</div>
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4 text-red-600" />
-                            <span>18:00</span>
-                            <span className="text-red-600">74</span>
+                      {/* 차트 표시 */}
+                      {hourlyDisplayData.length > 0 && (
+                        <>
+                          <ResponsiveContainer width="100%" height={280}>
+                            <BarChart
+                              data={hourlyDisplayData}
+                              margin={{ top: 5, right: 5, left: -30, bottom: 5 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                              <XAxis 
+                                dataKey="hour" 
+                                tick={{ fontSize: 10 }}
+                                stroke="#999"
+                              />
+                              <YAxis 
+                                domain={[0, 100]} 
+                                tick={{ fontSize: 10 }}
+                                stroke="#999"
+                              />
+                              <Tooltip 
+                                contentStyle={{ 
+                                  backgroundColor: 'white', 
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '8px',
+                                  fontSize: '12px'
+                                }} 
+                              />
+                              <Bar 
+                                dataKey="index" 
+                                fill="#818cf8" 
+                                radius={[4, 4, 0, 0]}
+                              />
+                            </BarChart>
+                          </ResponsiveContainer>
+
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div className="p-3 rounded-lg bg-gray-50">
+                              <div className="text-muted-foreground text-xs mb-1">가장 높았던 시간</div>
+                              <div className="flex items-center gap-2">
+                                <TrendingUp className="h-4 w-4 text-red-600" />
+                                {(() => {
+                                  const maxItem = hourlyDisplayData.reduce((max, item) => 
+                                    item.index > max.index ? item : max, hourlyDisplayData[0]);
+                                  return (
+                                    <>
+                                      <span>{maxItem.hour}</span>
+                                      <span className="text-red-600">{maxItem.index.toFixed(1)}</span>
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-gray-50">
+                              <div className="text-muted-foreground text-xs mb-1">가장 낮았던 시간</div>
+                              <div className="flex items-center gap-2">
+                                <TrendingUp className="h-4 w-4 text-green-600 rotate-180" />
+                                {(() => {
+                                  const minItem = hourlyDisplayData.reduce((min, item) => 
+                                    item.index < min.index ? item : min, hourlyDisplayData[0]);
+                                  return (
+                                    <>
+                                      <span>{minItem.hour}</span>
+                                      <span className="text-green-600">{minItem.index.toFixed(1)}</span>
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="p-3 rounded-lg bg-gray-50">
-                          <div className="text-muted-foreground text-xs mb-1">가장 낮았던 시간</div>
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4 text-green-600 rotate-180" />
-                            <span>03:00</span>
-                            <span className="text-green-600">67</span>
-                          </div>
-                        </div>
-                      </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -559,6 +683,8 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                   />
                 ))}
               </div>
+              </>
+              )}
             </div>
 
             {/* 스와이프 힌트 */}
@@ -588,6 +714,12 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
                 </div>
+              ) : jobDisplayData.length === 0 ? (
+                <NoDataMessage 
+                  message="직업별 지수 데이터가 없습니다"
+                  subMessage="아직 수집된 직업별 데이터가 없습니다."
+                  onRetry={fetchAllJobIndices}
+                />
               ) : (
                 <div className="space-y-3">
                   {jobDisplayData.map((item) => (
@@ -635,16 +767,29 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
               <Newspaper className="h-5 w-5 text-indigo-600" />
               <h2 className="text-base sm:text-lg">주요 이슈 뉴스</h2>
             </div>
-            <Badge variant="outline" className="text-xs">
-              {showAllClusters ? `전체 ${newsDisplayData.length}` : `TOP ${Math.min(3, newsDisplayData.length)}`}
-            </Badge>
+            {newsDisplayData.length > 0 && (
+              <Badge variant="outline" className="text-xs">
+                {showAllClusters ? `전체 ${newsDisplayData.length}` : `TOP ${Math.min(3, newsDisplayData.length)}`}
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-muted-foreground mb-4">가장 영향력 있는 뉴스 클러스터</p>
 
+          {/* 로딩 상태 */}
           {isLoadingClusters ? (
             <div className="flex items-center justify-center p-8">
               <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
             </div>
+          ) : clustersError ? (
+            /* 에러 상태 */
+            <ErrorMessage message={clustersError} onRetry={() => currentIndex?.collected_at && fetchClusters(currentIndex.collected_at)} />
+          ) : !hasClustersData || newsDisplayData.length === 0 ? (
+            /* 데이터 없음 상태 */
+            <NoDataMessage 
+              message="뉴스 클러스터 데이터가 없습니다"
+              subMessage={clusterMetadata?.message || "현재 분석된 클러스터가 없습니다."}
+              onRetry={() => currentIndex?.collected_at && fetchClusters(currentIndex.collected_at)}
+            />
           ) : (
             <>
               <div className="space-y-3">
