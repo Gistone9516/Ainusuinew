@@ -148,10 +148,12 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
   };
 
   // 직업별 지수 조회
-  const fetchAllJobIndices = async () => {
+  const fetchAllJobIndices = async (collectedAt?: string) => {
     setIsLoadingJobs(true);
     try {
-      const response = await IssueAPI.getAllJobIndices();
+      // collected_at을 파라미터로 받아서 사용
+      const response = await IssueAPI.getAllJobIndices(collectedAt);
+      console.log('[IssuePage] Job indices fetched with collected_at:', collectedAt, 'Result:', response);
       setAllJobIndices(response.jobs || []);
     } catch (err: any) {
       console.error('Failed to fetch job indices:', err);
@@ -204,10 +206,10 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
 
   // 직업별 지수 탭 선택 시 로드
   useEffect(() => {
-    if (selectedTab === 'byjob' && allJobIndices.length === 0) {
-      fetchAllJobIndices();
+    if (selectedTab === 'byjob' && allJobIndices.length === 0 && currentIndex?.collected_at) {
+      fetchAllJobIndices(currentIndex.collected_at);
     }
-  }, [selectedTab]);
+  }, [selectedTab, currentIndex?.collected_at]);
 
   // ==================== Computed Values ====================
 
@@ -269,6 +271,7 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
     cluster_id: cluster.cluster_id,
     collected_at: currentIndex?.collected_at,
     article_indices: cluster.article_indices,
+    article_collected_at: cluster.article_collected_at,  // 기사의 실제 수집 시간
   }));
 
   // 데이터 없음 표시 컴포넌트
@@ -715,10 +718,10 @@ export function IssuePage({ userData, onNavigate, onSelectCluster }: IssuePagePr
                   <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
                 </div>
               ) : jobDisplayData.length === 0 ? (
-                <NoDataMessage 
+                <NoDataMessage
                   message="직업별 지수 데이터가 없습니다"
                   subMessage="아직 수집된 직업별 데이터가 없습니다."
-                  onRetry={fetchAllJobIndices}
+                  onRetry={() => fetchAllJobIndices(currentIndex?.collected_at)}
                 />
               ) : (
                 <div className="space-y-3">
