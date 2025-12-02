@@ -97,29 +97,30 @@ export const getClusterSnapshot = async (
   collectedAt: string
 ): Promise<T.ClusterSnapshotResponseWithMeta> => {
   try {
-    const { data } = await apiClient.get<T.ClusterSnapshotResponseWithMeta>(
+    const { data } = await apiClient.get<unknown>(
       '/issue-index/clusters',
       { params: { collected_at: collectedAt } }
     );
     console.log('[IssueAPI] Clusters response:', JSON.stringify(data, null, 2));
     
     // 서버 응답 구조 정규화
-    if (data && 'success' in data && 'data' in data) {
-      return data;
+    if (data && typeof data === 'object' && 'success' in data && 'data' in data) {
+      return data as T.ClusterSnapshotResponseWithMeta;
     } else if (Array.isArray(data)) {
+      const clusters = data as T.ClusterSnapshot[];
       return { 
         success: true, 
-        data: data as T.ClusterSnapshot[],
+        data: clusters,
         metadata: {
           collected_at: collectedAt,
-          total_clusters: data.length,
-          active_count: data.filter((c: T.ClusterSnapshot) => c.status === 'active').length,
-          inactive_count: data.filter((c: T.ClusterSnapshot) => c.status === 'inactive').length,
+          total_clusters: clusters.length,
+          active_count: clusters.filter((c) => c.status === 'active').length,
+          inactive_count: clusters.filter((c) => c.status === 'inactive').length,
         }
       };
     }
     
-    return data;
+    return data as T.ClusterSnapshotResponseWithMeta;
   } catch (error: any) {
     console.error('[IssueAPI] Clusters request failed:', error?.message);
     return {
@@ -138,24 +139,32 @@ export const getClusterSnapshot = async (
 
 /**
  * 4. 기사 원문 조회 (에러 처리 포함)
- * @param collectedAt - ISO 8601 형식 시간
+ * @param collectedAt - ISO 8601 형식 시간 (스냅샷 시간, 기존 방식)
  * @param indices - 기사 인덱스 배열
+ * @param articleCollectedAt - 기사의 실제 수집 시간 (우선 사용)
  */
 export const getArticles = async (
   collectedAt: string,
-  indices: number[]
+  indices: number[],
+  articleCollectedAt?: string
 ): Promise<T.ArticlesResponse> => {
-  console.log('[IssueAPI] getArticles called with:', { collectedAt, indices });
+  console.log('[IssueAPI] getArticles called with:', { collectedAt, indices, articleCollectedAt });
   
   try {
+    // article_collected_at이 있으면 우선 사용, 없으면 collected_at 사용
+    const params: Record<string, string> = {
+      indices: indices.join(','),
+    };
+    
+    if (articleCollectedAt) {
+      params.article_collected_at = articleCollectedAt;
+    } else {
+      params.collected_at = collectedAt;
+    }
+    
     const { data } = await apiClient.get<T.ArticlesResponse>(
       '/issue-index/articles',
-      {
-        params: {
-          collected_at: collectedAt,
-          indices: indices.join(','),
-        },
-      }
+      { params }
     );
     console.log('[IssueAPI] Articles response:', JSON.stringify(data, null, 2));
     

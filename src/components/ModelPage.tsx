@@ -47,13 +47,12 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
   const [benchmarkProgressionData, setBenchmarkProgressionData] = useState<Record<string, any[]>>({});
 
   // Job-based recommendation states
-  const [jobRecommendedModels, setJobRecommendedModels] = useState<Array<{
-    name: string;
-    description: string;
-    score: number;
-    category: string;
-    benchmarks: Record<string, number>;
-  }>>([]);
+  const [jobRecommendedModels, setJobRecommendedModels] = useState<T.JobRecommendation[]>([]);
+  const [jobCategory, setJobCategory] = useState<string>('당신');
+  const [jobCriteria, setJobCriteria] = useState<{
+    primary_benchmark: string;
+    secondary_benchmark: string;
+  } | null>(null);
   const [isLoadingJobRecommendations, setIsLoadingJobRecommendations] = useState(false);
 
   // Load initial data
@@ -91,36 +90,42 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
       // 사용자 직업 정보가 있으면 해당 직업 기반 추천
       const jobCode = userData.job_category_code;
       const jobId = userData.job_category_id;
-      
-      // job_category_code 또는 job_category_id가 없으면 API 호출 건너뜀 (fallback 사용)
+
+      // job_category_code 또는 job_category_id가 없으면 API 호출 건너뜀 (빈 배열 유지)
       if (!jobCode && !jobId) {
-        console.log('[ModelPage] No job category info, using fallback models');
+        console.log('[ModelPage] No job category info, skipping API call');
         setIsLoadingJobRecommendations(false);
         return;
       }
-      
+
       const response = await modelApi.getModelsByJobCategory({
         job_category_code: jobCode,
         job_category_id: jobId,
         limit: 3,
       });
-      
-      if (response.success && response.data?.recommended_models) {
-        const models = response.data.recommended_models.map((model) => ({
-          name: model.model_name,
-          description: `${model.creator_name}의 AI 모델`,
-          score: Math.round(model.overall_score),
-          category: response.data.job_category?.job_name || '범용',
-          benchmarks: {
-            '종합': model.overall_score,
-            '코딩': model.coding_index || 0,
-          },
-        }));
-        setJobRecommendedModels(models);
+
+      if (response.success && response.data) {
+        // 직업 카테고리 정보 저장
+        setJobCategory(response.data.job_category.job_name);
+
+        // 벤치마크 기준 저장
+        setJobCriteria({
+          primary_benchmark: response.data.criteria.primary_benchmark,
+          secondary_benchmark: response.data.criteria.secondary_benchmark,
+        });
+
+        // 추천 모델 저장 (API 응답 그대로 사용)
+        setJobRecommendedModels(response.data.recommended_models);
+
+        console.log('[ModelPage] Job-based recommendations loaded:', {
+          category: response.data.job_category.job_name,
+          count: response.data.recommended_models.length,
+          models: response.data.recommended_models.map(m => m.model_name),
+        });
       }
     } catch (error) {
-      console.error('Error loading job-based recommendations:', error);
-      // 에러 발생 시 fallback 모델 사용 (기본값 유지)
+      console.error('[ModelPage] Error loading job-based recommendations:', error);
+      // 에러 발생 시 빈 배열 유지
     } finally {
       setIsLoadingJobRecommendations(false);
     }
@@ -198,42 +203,6 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
     return null;
   };
 
-  // Default recommended models (fallback when API data not available)
-  const fallbackModels = [
-    {
-      name: 'GPT-4',
-      description: 'OpenAI의 최신 대규모 언어 모델',
-      score: 95,
-      category: '범용',
-      benchmarks: {
-        'MMLU': 86.4,
-        'HumanEval': 67.0,
-      },
-    },
-    {
-      name: 'Claude 3 Opus',
-      description: 'Anthropic의 고성능 AI 모델',
-      score: 93,
-      category: '범용',
-      benchmarks: {
-        'MMLU': 87.0,
-        'HumanEval': 64.0,
-      },
-    },
-    {
-      name: 'Gemini Ultra',
-      description: 'Google의 최고 성능 모델',
-      score: 92,
-      category: '범용',
-      benchmarks: {
-        'MMLU': 83.7,
-        'HumanEval': 62.0,
-      },
-    },
-  ];
-
-  // Use API data or fallback
-  const recommendedModels = jobRecommendedModels.length > 0 ? jobRecommendedModels : fallbackModels;
 
   const toggleComparisonSeries = async (series: string) => {
     if (comparisonSeries.includes(series)) {
@@ -281,27 +250,57 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
     }
   }, [modelA, modelB]);
 
-  // Get comparison chart data from API result
+  // Get comparison chart data from key_benchmarks
   const getComparisonData = () => {
-    // comparisonResult가 없거나 visual_data가 없으면 빈 배열 반환
-    if (!comparisonResult?.visual_data?.benchmark_comparison) {
-      console.log('[ModelPage] No benchmark data found:', comparisonResult);
+    if (!comparisonResult) {
+      console.log('[ModelPage] No comparisonResult found');
       return [];
     }
 
-    // 헬퍼 함수를 통해 안전하게 변환 (배열 검사 및 null 체크 포함됨)
-    const transformed = modelHelpers.transformBenchmarkComparisonForChart(
-      comparisonResult.visual_data.benchmark_comparison
-    );
-    
-    if (!transformed || !Array.isArray(transformed)) return [];
+    const modelA = comparisonResult.model_a;
+    const modelB = comparisonResult.model_b;
 
-    // Transform to use fixed keys for chart safety
-    return transformed.map(item => ({
-      name: item.name || 'Unknown',
-      scoreA: typeof item.modelA === 'number' ? item.modelA : 0,
-      scoreB: typeof item.modelB === 'number' ? item.modelB : 0,
-    }));
+    if (!modelA.key_benchmarks || !modelB.key_benchmarks) {
+      console.log('[ModelPage] No key_benchmarks found');
+      return [];
+    }
+
+    // 두 모델의 key_benchmarks를 병합하여 비교 데이터 생성
+    const benchmarkMap = new Map<string, { name: string; display_name: string; scoreA: number; scoreB: number }>();
+
+    // Model A의 벤치마크 추가
+    modelA.key_benchmarks.forEach(benchmark => {
+      benchmarkMap.set(benchmark.name, {
+        name: benchmark.name,
+        display_name: benchmark.display_name,
+        scoreA: parseFloat(benchmark.normalized_score) || 0,
+        scoreB: 0,
+      });
+    });
+
+    // Model B의 벤치마크 추가 또는 업데이트
+    modelB.key_benchmarks.forEach(benchmark => {
+      const existing = benchmarkMap.get(benchmark.name);
+      if (existing) {
+        existing.scoreB = parseFloat(benchmark.normalized_score) || 0;
+      } else {
+        benchmarkMap.set(benchmark.name, {
+          name: benchmark.name,
+          display_name: benchmark.display_name,
+          scoreA: 0,
+          scoreB: parseFloat(benchmark.normalized_score) || 0,
+        });
+      }
+    });
+
+    // Map을 배열로 변환하고 점수 합계 기준으로 정렬
+    return Array.from(benchmarkMap.values())
+      .sort((a, b) => (b.scoreA + b.scoreB) - (a.scoreA + a.scoreB))
+      .map(item => ({
+        name: item.display_name,
+        scoreA: item.scoreA,
+        scoreB: item.scoreB,
+      }));
   };
 
   // Load timeline on series change
@@ -607,19 +606,32 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
             <div className="bg-white rounded-xl p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-600" />
-                <h2 className="text-base sm:text-lg">{userData.job || '당신'}을 위한 추천 모델</h2>
+                <h2 className="text-base sm:text-lg">{jobCategory}을 위한 추천 모델</h2>
               </div>
-              <p className="text-xs sm:text-sm text-muted-foreground mb-4">벤치마크 기준 특화 모델 3개</p>
-              
+              <p className="text-xs sm:text-sm text-muted-foreground mb-4">
+                {jobCriteria
+                  ? `${jobCriteria.primary_benchmark} · ${jobCriteria.secondary_benchmark} 벤치마크 기준`
+                  : '벤치마크 기준 특화 모델 3개'}
+              </p>
+
               {isLoadingJobRecommendations ? (
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
                 </div>
+              ) : jobRecommendedModels.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-8 text-center">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    직업 정보를 설정하면 맞춤 모델을 추천받을 수 있습니다.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    마이페이지에서 프로필을 완성해보세요.
+                  </p>
+                </div>
               ) : (
               <div className="space-y-3">
-                {recommendedModels.map((model, index) => (
+                {jobRecommendedModels.map((model, index) => (
                   <div
-                    key={model.name}
+                    key={model.model_id}
                     className="p-3 sm:p-4 rounded-xl bg-indigo-50/70 hover:bg-indigo-50 transition-colors"
                   >
                     <div className="flex items-start justify-between mb-2 sm:mb-3">
@@ -629,22 +641,24 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                           index === 1 ? 'bg-gray-400 text-white' :
                           'bg-orange-400 text-white'
                         }`}>
-                          {index + 1}
+                          {model.rank}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="text-sm sm:text-base truncate">{model.name}</h3>
-                          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">{model.description}</p>
+                          <h3 className="text-sm sm:text-base truncate">{model.model_name}</h3>
+                          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">{model.creator_name}</p>
                         </div>
                       </div>
-                      <Badge variant="default" className="shrink-0 ml-2 text-xs">{model.score}점</Badge>
+                      <Badge variant="default" className="shrink-0 ml-2 text-xs">
+                        {model.weighted_score.toFixed(1)}점
+                      </Badge>
                     </div>
                     <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                      <Badge variant="outline" className="text-xs bg-white">{model.category}</Badge>
-                      {Object.entries(model.benchmarks).map(([key, value]) => (
-                        <Badge key={key} variant="secondary" className="text-xs bg-white/50">
-                          {key}: {value}점
-                        </Badge>
-                      ))}
+                      <Badge variant="outline" className="text-xs bg-white">
+                        {model.benchmark_scores.primary.name}: {model.benchmark_scores.primary.score.toFixed(1)}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs bg-white/50">
+                        {model.benchmark_scores.secondary.name}: {model.benchmark_scores.secondary.score.toFixed(1)}
+                      </Badge>
                     </div>
                   </div>
                 ))}
@@ -756,18 +770,61 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                     </div>
                     <div className="p-3 sm:p-4">
                       <div className="space-y-2 sm:space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                          <span className="text-xs text-muted-foreground">종합 점수</span>
-                          <Badge variant="default" className="text-xs w-fit">
-                            {comparisonResult.model_a.overall_score}점
-                          </Badge>
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                          <span className="text-xs text-muted-foreground">코딩 지수</span>
-                          <Badge variant="outline" className="text-xs w-fit">
-                            {comparisonResult.model_a.coding_index}점
-                          </Badge>
-                        </div>
+                        {/* 종합 점수 - 0이 아닐 때만 표시 */}
+                        {parseFloat(comparisonResult.model_a.overall_score) > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">종합 점수</span>
+                            <Badge variant="default" className="text-xs w-fit">
+                              {comparisonResult.model_a.overall_score}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 코딩 지수 - 0이 아닐 때만 표시 */}
+                        {comparisonResult.model_a.scores.coding > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">코딩 지수</span>
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {comparisonResult.model_a.scores.coding}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 수학 지수 - 0이 아닐 때만 표시 */}
+                        {comparisonResult.model_a.scores.math > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">수학 지수</span>
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {comparisonResult.model_a.scores.math}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 추론 지수 - 0이 아닐 때만 표시 */}
+                        {comparisonResult.model_a.scores.reasoning > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">추론 지수</span>
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {comparisonResult.model_a.scores.reasoning}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 일반 지능 지수 - 0이 아닐 때만 표시 */}
+                        {comparisonResult.model_a.scores.intelligence > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">일반 지능</span>
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {comparisonResult.model_a.scores.intelligence}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 데이터가 없을 경우 메시지 표시 */}
+                        {parseFloat(comparisonResult.model_a.overall_score) === 0 &&
+                         comparisonResult.model_a.scores.coding === 0 &&
+                         comparisonResult.model_a.scores.math === 0 &&
+                         comparisonResult.model_a.scores.reasoning === 0 &&
+                         comparisonResult.model_a.scores.intelligence === 0 && (
+                          <div className="text-xs text-muted-foreground text-center py-2">
+                            종합 점수 데이터 없음
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -780,18 +837,61 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                     </div>
                     <div className="p-3 sm:p-4">
                       <div className="space-y-2 sm:space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                          <span className="text-xs text-muted-foreground">종합 점수</span>
-                          <Badge variant="default" className="text-xs w-fit">
-                            {comparisonResult.model_b.overall_score}점
-                          </Badge>
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                          <span className="text-xs text-muted-foreground">코딩 지수</span>
-                          <Badge variant="outline" className="text-xs w-fit">
-                            {comparisonResult.model_b.coding_index}점
-                          </Badge>
-                        </div>
+                        {/* 종합 점수 - 0이 아닐 때만 표시 */}
+                        {parseFloat(comparisonResult.model_b.overall_score) > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">종합 점수</span>
+                            <Badge variant="default" className="text-xs w-fit">
+                              {comparisonResult.model_b.overall_score}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 코딩 지수 - 0이 아닐 때만 표시 */}
+                        {comparisonResult.model_b.scores.coding > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">코딩 지수</span>
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {comparisonResult.model_b.scores.coding}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 수학 지수 - 0이 아닐 때만 표시 */}
+                        {comparisonResult.model_b.scores.math > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">수학 지수</span>
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {comparisonResult.model_b.scores.math}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 추론 지수 - 0이 아닐 때만 표시 */}
+                        {comparisonResult.model_b.scores.reasoning > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">추론 지수</span>
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {comparisonResult.model_b.scores.reasoning}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 일반 지능 지수 - 0이 아닐 때만 표시 */}
+                        {comparisonResult.model_b.scores.intelligence > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs text-muted-foreground">일반 지능</span>
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {comparisonResult.model_b.scores.intelligence}점
+                            </Badge>
+                          </div>
+                        )}
+                        {/* 데이터가 없을 경우 메시지 표시 */}
+                        {parseFloat(comparisonResult.model_b.overall_score) === 0 &&
+                         comparisonResult.model_b.scores.coding === 0 &&
+                         comparisonResult.model_b.scores.math === 0 &&
+                         comparisonResult.model_b.scores.reasoning === 0 &&
+                         comparisonResult.model_b.scores.intelligence === 0 && (
+                          <div className="text-xs text-muted-foreground text-center py-2">
+                            종합 점수 데이터 없음
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -801,155 +901,180 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                 <div className="bg-white rounded-xl p-4 sm:p-6">
                   <h2 className="text-base sm:text-lg mb-2">주요 지표 비교</h2>
                   <p className="text-xs sm:text-sm text-muted-foreground mb-6">성능 및 가격 메타 정보</p>
-                  
+
                   <div className="space-y-4 sm:space-y-6">
-                    {/* Coding Performance */}
-                    <div className="space-y-2">
-                      <div className="text-xs sm:text-sm text-center text-muted-foreground mb-2 sm:mb-3">코딩 성능</div>
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        {/* Model A */}
-                        <div className="flex-1 text-right min-w-0">
-                          <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
-                            {getModelData(modelA)!.model_name}
-                          </div>
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="text-base sm:text-xl">{getModelData(modelA)!.coding_index}</span>
-                            {getModelData(modelA)!.coding_index > getModelData(modelB)!.coding_index && (
-                              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
-                            )}
+                    {/* Coding Performance - 0이 아닐 때만 표시 */}
+                    {(getModelData(modelA)!.scores.coding > 0 || getModelData(modelB)!.scores.coding > 0) && (
+                      <>
+                        <div className="space-y-2">
+                          <div className="text-xs sm:text-sm text-center text-muted-foreground mb-2 sm:mb-3">코딩 성능</div>
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            {/* Model A */}
+                            <div className="flex-1 text-right min-w-0">
+                              <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
+                                {getModelData(modelA)!.model_name}
+                              </div>
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-base sm:text-xl">{getModelData(modelA)!.scores.coding}</span>
+                                {getModelData(modelA)!.scores.coding > getModelData(modelB)!.scores.coding && (
+                                  <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Comparison Bar */}
+                            <div className="w-16 sm:w-32 h-2 bg-gray-200 rounded-full relative overflow-hidden shrink-0">
+                              <div
+                                className="absolute left-0 h-full bg-indigo-500 rounded-full transition-all"
+                                style={{
+                                  width: `${(getModelData(modelA)!.scores.coding / (getModelData(modelA)!.scores.coding + getModelData(modelB)!.scores.coding)) * 100}%`
+                                }}
+                              />
+                              <div
+                                className="absolute right-0 h-full bg-purple-500 rounded-full transition-all"
+                                style={{
+                                  width: `${(getModelData(modelB)!.scores.coding / (getModelData(modelA)!.scores.coding + getModelData(modelB)!.scores.coding)) * 100}%`
+                                }}
+                              />
+                            </div>
+
+                            {/* Model B */}
+                            <div className="flex-1 text-left min-w-0">
+                              <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
+                                {getModelData(modelB)!.model_name}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {getModelData(modelB)!.scores.coding > getModelData(modelA)!.scores.coding && (
+                                  <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
+                                )}
+                                <span className="text-base sm:text-xl">{getModelData(modelB)!.scores.coding}</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
+                        <div className="border-t pt-4 sm:pt-6" />
+                      </>
+                    )}
 
-                        {/* Comparison Bar */}
-                        <div className="w-16 sm:w-32 h-2 bg-gray-200 rounded-full relative overflow-hidden shrink-0">
-                          <div 
-                            className="absolute left-0 h-full bg-indigo-500 rounded-full transition-all"
-                            style={{ 
-                              width: `${(getModelData(modelA)!.coding_index / (getModelData(modelA)!.coding_index + getModelData(modelB)!.coding_index)) * 100}%` 
-                            }}
-                          />
-                          <div 
-                            className="absolute right-0 h-full bg-purple-500 rounded-full transition-all"
-                            style={{ 
-                              width: `${(getModelData(modelB)!.coding_index / (getModelData(modelA)!.coding_index + getModelData(modelB)!.coding_index)) * 100}%` 
-                            }}
-                          />
-                        </div>
+                    {/* Price Comparison - null이 아닐 때만 표시 */}
+                    {(getModelData(modelA)!.pricing.price_blended_3to1 || getModelData(modelB)!.pricing.price_blended_3to1) && (
+                      <>
+                        <div className="space-y-2">
+                          <div className="text-xs sm:text-sm text-center text-muted-foreground mb-2 sm:mb-3">가격 (blended 3:1)</div>
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            {/* Model A */}
+                            <div className="flex-1 text-right min-w-0">
+                              <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
+                                {getModelData(modelA)!.model_name}
+                              </div>
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-base sm:text-xl">
+                                  {getModelData(modelA)!.pricing.price_blended_3to1 ? `$${getModelData(modelA)!.pricing.price_blended_3to1}` : 'N/A'}
+                                </span>
+                                {getModelData(modelA)!.pricing.price_blended_3to1 && getModelData(modelB)!.pricing.price_blended_3to1 &&
+                                 parseFloat(getModelData(modelA)!.pricing.price_blended_3to1) < parseFloat(getModelData(modelB)!.pricing.price_blended_3to1) && (
+                                  <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
+                                )}
+                              </div>
+                            </div>
 
-                        {/* Model B */}
-                        <div className="flex-1 text-left min-w-0">
-                          <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
-                            {getModelData(modelB)!.model_name}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {getModelData(modelB)!.coding_index > getModelData(modelA)!.coding_index && (
-                              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
+                            {/* Comparison Bar (inverted for price - lower is better) */}
+                            {getModelData(modelA)!.pricing.price_blended_3to1 && getModelData(modelB)!.pricing.price_blended_3to1 && (
+                              <div className="w-16 sm:w-32 h-2 bg-gray-200 rounded-full relative overflow-hidden shrink-0">
+                                <div
+                                  className="absolute left-0 h-full bg-indigo-500 rounded-full transition-all"
+                                  style={{
+                                    width: `${(parseFloat(getModelData(modelB)!.pricing.price_blended_3to1) / (parseFloat(getModelData(modelA)!.pricing.price_blended_3to1) + parseFloat(getModelData(modelB)!.pricing.price_blended_3to1))) * 100}%`
+                                  }}
+                                />
+                                <div
+                                  className="absolute right-0 h-full bg-purple-500 rounded-full transition-all"
+                                  style={{
+                                    width: `${(parseFloat(getModelData(modelA)!.pricing.price_blended_3to1) / (parseFloat(getModelData(modelA)!.pricing.price_blended_3to1) + parseFloat(getModelData(modelB)!.pricing.price_blended_3to1))) * 100}%`
+                                  }}
+                                />
+                              </div>
                             )}
-                            <span className="text-base sm:text-xl">{getModelData(modelB)!.coding_index}</span>
+
+                            {/* Model B */}
+                            <div className="flex-1 text-left min-w-0">
+                              <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
+                                {getModelData(modelB)!.model_name}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {getModelData(modelA)!.pricing.price_blended_3to1 && getModelData(modelB)!.pricing.price_blended_3to1 &&
+                                 parseFloat(getModelData(modelB)!.pricing.price_blended_3to1) < parseFloat(getModelData(modelA)!.pricing.price_blended_3to1) && (
+                                  <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
+                                )}
+                                <span className="text-base sm:text-xl">
+                                  {getModelData(modelB)!.pricing.price_blended_3to1 ? `$${getModelData(modelB)!.pricing.price_blended_3to1}` : 'N/A'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="border-t pt-4 sm:pt-6" />
+                      </>
+                    )}
+
+                    {/* Overall Score - 0이 아닐 때만 표시 */}
+                    {(parseFloat(getModelData(modelA)!.overall_score) > 0 || parseFloat(getModelData(modelB)!.overall_score) > 0) && (
+                      <div className="space-y-2">
+                        <div className="text-xs sm:text-sm text-center text-muted-foreground mb-2 sm:mb-3">종합 점수</div>
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          {/* Model A */}
+                          <div className="flex-1 text-right min-w-0">
+                            <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
+                              {getModelData(modelA)!.model_name}
+                            </div>
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="text-base sm:text-xl">{getModelData(modelA)!.overall_score}</span>
+                              {parseFloat(getModelData(modelA)!.overall_score) > parseFloat(getModelData(modelB)!.overall_score) && (
+                                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Comparison Bar */}
+                          <div className="w-16 sm:w-32 h-2 bg-gray-200 rounded-full relative overflow-hidden shrink-0">
+                            <div
+                              className="absolute left-0 h-full bg-indigo-500 rounded-full transition-all"
+                              style={{
+                                width: `${(parseFloat(getModelData(modelA)!.overall_score) / (parseFloat(getModelData(modelA)!.overall_score) + parseFloat(getModelData(modelB)!.overall_score))) * 100}%`
+                              }}
+                            />
+                            <div
+                              className="absolute right-0 h-full bg-purple-500 rounded-full transition-all"
+                              style={{
+                                width: `${(parseFloat(getModelData(modelB)!.overall_score) / (parseFloat(getModelData(modelA)!.overall_score) + parseFloat(getModelData(modelB)!.overall_score))) * 100}%`
+                              }}
+                            />
+                          </div>
+
+                          {/* Model B */}
+                          <div className="flex-1 text-left min-w-0">
+                            <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
+                              {getModelData(modelB)!.model_name}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {parseFloat(getModelData(modelB)!.overall_score) > parseFloat(getModelData(modelA)!.overall_score) && (
+                                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
+                              )}
+                              <span className="text-base sm:text-xl">{getModelData(modelB)!.overall_score}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
-                    <div className="border-t pt-4 sm:pt-6" />
-
-                    {/* Price Comparison */}
-                    <div className="space-y-2">
-                      <div className="text-xs sm:text-sm text-center text-muted-foreground mb-2 sm:mb-3">가격 (blended 3:1)</div>
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        {/* Model A */}
-                        <div className="flex-1 text-right min-w-0">
-                          <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
-                            {getModelData(modelA)!.model_name}
-                          </div>
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="text-base sm:text-xl">${getModelData(modelA)!.price_blended_3to1}</span>
-                            {getModelData(modelA)!.price_blended_3to1 < getModelData(modelB)!.price_blended_3to1 && (
-                              <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Comparison Bar (inverted for price - lower is better) */}
-                        <div className="w-16 sm:w-32 h-2 bg-gray-200 rounded-full relative overflow-hidden shrink-0">
-                          <div 
-                            className="absolute left-0 h-full bg-indigo-500 rounded-full transition-all"
-                            style={{ 
-                              width: `${(getModelData(modelB)!.price_blended_3to1 / (getModelData(modelA)!.price_blended_3to1 + getModelData(modelB)!.price_blended_3to1)) * 100}%` 
-                            }}
-                          />
-                          <div 
-                            className="absolute right-0 h-full bg-purple-500 rounded-full transition-all"
-                            style={{ 
-                              width: `${(getModelData(modelA)!.price_blended_3to1 / (getModelData(modelA)!.price_blended_3to1 + getModelData(modelB)!.price_blended_3to1)) * 100}%` 
-                            }}
-                          />
-                        </div>
-
-                        {/* Model B */}
-                        <div className="flex-1 text-left min-w-0">
-                          <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
-                            {getModelData(modelB)!.model_name}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {getModelData(modelB)!.price_blended_3to1 < getModelData(modelA)!.price_blended_3to1 && (
-                              <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
-                            )}
-                            <span className="text-base sm:text-xl">${getModelData(modelB)!.price_blended_3to1}</span>
-                          </div>
-                        </div>
+                    {/* 데이터가 없을 경우 메시지 표시 */}
+                    {(getModelData(modelA)!.scores.coding === 0 && getModelData(modelB)!.scores.coding === 0) &&
+                     (!getModelData(modelA)!.pricing.price_blended_3to1 && !getModelData(modelB)!.pricing.price_blended_3to1) &&
+                     (parseFloat(getModelData(modelA)!.overall_score) === 0 && parseFloat(getModelData(modelB)!.overall_score) === 0) && (
+                      <div className="text-sm text-muted-foreground text-center py-8">
+                        주요 지표 데이터가 없습니다. 아래 벤치마크 상세 비교를 참고하세요.
                       </div>
-                    </div>
-
-                    <div className="border-t pt-4 sm:pt-6" />
-
-                    {/* Overall Score */}
-                    <div className="space-y-2">
-                      <div className="text-xs sm:text-sm text-center text-muted-foreground mb-2 sm:mb-3">종합 점수</div>
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        {/* Model A */}
-                        <div className="flex-1 text-right min-w-0">
-                          <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
-                            {getModelData(modelA)!.model_name}
-                          </div>
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="text-base sm:text-xl">{getModelData(modelA)!.overall_score}</span>
-                            {getModelData(modelA)!.overall_score > getModelData(modelB)!.overall_score && (
-                              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Comparison Bar */}
-                        <div className="w-16 sm:w-32 h-2 bg-gray-200 rounded-full relative overflow-hidden shrink-0">
-                          <div 
-                            className="absolute left-0 h-full bg-indigo-500 rounded-full transition-all"
-                            style={{ 
-                              width: `${(getModelData(modelA)!.overall_score / (getModelData(modelA)!.overall_score + getModelData(modelB)!.overall_score)) * 100}%` 
-                            }}
-                          />
-                          <div 
-                            className="absolute right-0 h-full bg-purple-500 rounded-full transition-all"
-                            style={{ 
-                              width: `${(getModelData(modelB)!.overall_score / (getModelData(modelA)!.overall_score + getModelData(modelB)!.overall_score)) * 100}%` 
-                            }}
-                          />
-                        </div>
-
-                        {/* Model B */}
-                        <div className="flex-1 text-left min-w-0">
-                          <div className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">
-                            {getModelData(modelB)!.model_name}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {getModelData(modelB)!.overall_score > getModelData(modelA)!.overall_score && (
-                              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 shrink-0" />
-                            )}
-                            <span className="text-base sm:text-xl">{getModelData(modelB)!.overall_score}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 

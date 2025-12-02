@@ -55,8 +55,8 @@ export default function App() {
           setCurrentPage('onboarding-job');
         }} />;
       case 'onboarding-job':
-        return <OnboardingJob onNext={(job) => {
-          setUserData({ ...userData, job });
+        return <OnboardingJob onNext={(job, jobCode) => {
+          setUserData({ ...userData, job, job_category_code: jobCode });
           setCurrentPage('onboarding-tags');
         }} onBack={() => setCurrentPage('onboarding-gender')} />;
       case 'onboarding-tags':
