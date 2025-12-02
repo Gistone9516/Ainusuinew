@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Briefcase, ChevronLeft } from 'lucide-react';
 
 interface OnboardingJobProps {
-  onNext: (job: string) => void;
+  onNext: (job: string, jobCode: string) => void;
   onBack: () => void;
 }
 
@@ -59,7 +59,10 @@ export function OnboardingJob({ onNext, onBack }: OnboardingJobProps) {
             ))}
           </div>
           <Button
-            onClick={() => selectedJob && onNext(selectedJob)}
+            onClick={() => {
+              const job = jobs.find(j => j.value === selectedJob);
+              if (job) onNext(job.label, job.value);
+            }}
             disabled={!selectedJob}
             className="w-full"
           >

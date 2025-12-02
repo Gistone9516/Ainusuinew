@@ -37,6 +37,7 @@ export interface ClusterSnapshot {
   appearance_count: number;
   article_count: number;
   article_indices: number[];
+  article_collected_at?: string;  // 기사의 실제 수집 시간 (우선 사용)
   status: 'active' | 'inactive';
   cluster_score: number;
 }

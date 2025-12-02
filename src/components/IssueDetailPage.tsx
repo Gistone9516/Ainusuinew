@@ -18,6 +18,7 @@ interface ClusterData {
   cluster_id?: string;
   collected_at?: string;
   article_indices?: number[];
+  article_collected_at?: string;  // 기사의 실제 수집 시간 (우선 사용)
 }
 
 interface IssueDetailPageProps {
@@ -49,6 +50,7 @@ export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: Is
       console.log('[IssueDetailPage] Cluster data:', {
         title: cluster.title,
         collected_at: cluster.collected_at,
+        article_collected_at: cluster.article_collected_at,
         article_indices: cluster.article_indices,
         article_indices_length: cluster.article_indices?.length,
       });
@@ -63,13 +65,14 @@ export function IssueDetailPage({ cluster, onNavigate: _onNavigate, onBack }: Is
 
           console.log('[IssueDetailPage] Fetching articles:', {
             collectedAt,
+            articleCollectedAt: cluster.article_collected_at,
             pageIndices,
             start,
             end,
           });
 
-          // API 호출
-          const response = await IssueAPI.getArticles(collectedAt, pageIndices);
+          // API 호출 - article_collected_at 우선 사용
+          const response = await IssueAPI.getArticles(collectedAt, pageIndices, cluster.article_collected_at);
           
           console.log('[IssueDetailPage] Articles response:', response);
           

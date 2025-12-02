@@ -44,7 +44,7 @@ export const getExtendedUser = async (): Promise<T.ExtendedUser> => {
  * 프로필 업데이트 (백엔드 API 없음 - localStorage만 저장)
  */
 export const updateProfile = async (profileData: T.UpdateProfileRequest): Promise<void> => {
-  // TODO: 백엔드 API 구현 대기 - PUT /api/v1/users/profile
+  // TODO: 백엔드 API 구현 대기 - PUT /api/users/profile
 
   // 임시로 localStorage에만 저장
   const preferencesStr = localStorage.getItem('userPreferences');
@@ -85,7 +85,7 @@ export const updateProfile = async (profileData: T.UpdateProfileRequest): Promis
  * 회원 탈퇴 (백엔드 API 없음)
  */
 export const deleteAccount = async (): Promise<void> => {
-  // TODO: 백엔드 API 구현 대기 - DELETE /api/v1/users/account
+  // TODO: 백엔드 API 구현 대기 - DELETE /api/users/account
 
   // 임시로 로컬 데이터만 삭제
   localStorage.clear();
@@ -120,7 +120,7 @@ export const getJobCategories = async (): Promise<T.JobCategoryData[]> => {
 
 /**
  * 내 게시글 목록 (클라이언트 측 필터링)
- * 백엔드 API 없음 - GET /api/v1/users/posts
+ * 백엔드 API 없음 - GET /api/users/posts
  */
 export const getMyPosts = async (
   userId: number,
@@ -180,7 +180,7 @@ export const getMyPostsCount = async (userId: number): Promise<number> => {
 export const getMyComments = async (
   params: T.PaginationParams = {}
 ): Promise<T.PaginatedData<T.MyComment>> => {
-  // TODO: 백엔드 API 구현 대기 - GET /api/v1/users/comments
+  // TODO: 백엔드 API 구현 대기 - GET /api/users/comments
 
   // 더미 데이터 반환
   return {
@@ -212,7 +212,7 @@ export const deletePost = async (postId: number): Promise<void> => {
  * 댓글 삭제 (백엔드 API 없음)
  */
 export const deleteComment = async (_commentId: number): Promise<void> => {
-  // TODO: 백엔드 API 구현 대기 - DELETE /api/v1/community/comments/:commentId
+  // TODO: 백엔드 API 구현 대기 - DELETE /api/community/comments/:commentId
 
   // 백엔드 API가 준비되면 아래 코드 사용
   /*
