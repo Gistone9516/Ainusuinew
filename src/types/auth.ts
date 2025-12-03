@@ -52,7 +52,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   nickname: string;
-  job_category_id: number;
+  job_category_id?: number;
 }
 
 export interface LoginRequest {
@@ -132,7 +132,6 @@ export interface RegisterFormState {
   password: string;
   passwordConfirm: string;
   nickname: string;
-  job_category_id: number | null;
   agreeTerms: boolean;
   agreePrivacy: boolean;
 }

@@ -192,12 +192,20 @@ export const getAllJobIndices = async (
   collectedAt?: string
 ): Promise<T.AllJobIndicesResponse> => {
   try {
-    const { data } = await apiClient.get<T.AllJobIndicesResponse>(
+    const { data } = await apiClient.get<unknown>(
       '/issue-index/jobs/all',
       { params: collectedAt ? { collected_at: collectedAt } : {} }
     );
     console.log('[IssueAPI] All job indices response:', JSON.stringify(data, null, 2));
-    return data;
+    
+    // 서버 응답 구조 정규화: { success, data: { collected_at, jobs } } -> { collected_at, jobs }
+    if (data && typeof data === 'object' && 'success' in data && 'data' in data) {
+      const wrapped = data as { success: boolean; data: T.AllJobIndicesResponse };
+      return wrapped.data;
+    }
+    
+    // 이미 { collected_at, jobs } 형태인 경우
+    return data as T.AllJobIndicesResponse;
   } catch (error: any) {
     console.error('[IssueAPI] getAllJobIndices failed:', error?.message);
     // 실패 시 기본값 반환

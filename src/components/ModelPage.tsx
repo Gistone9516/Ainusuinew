@@ -191,6 +191,33 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
     return [...data].reverse();
   };
 
+  // Y축 도메인 계산 함수 - Requirements 2.1, 2.2, 2.4
+  const calculateYAxisDomain = (data: any[]): [number, number] => {
+    // 빈 배열일 때 기본값 [0, 1] 반환 (Requirement 2.4)
+    if (!data || data.length === 0) {
+      return [0, 1];
+    }
+    
+    const scores = data.map(d => d.score).filter(s => typeof s === 'number');
+    if (scores.length === 0) {
+      return [0, 1];
+    }
+    
+    // 데이터의 min/max 값 계산 (Requirement 2.1)
+    const min = Math.min(...scores);
+    const max = Math.max(...scores);
+    const range = max - min;
+    
+    // 10% 패딩 적용 (Requirement 2.2)
+    const padding = range * 0.1;
+    
+    // 최소값이 0보다 작아지지 않도록 처리
+    const domainMin = Math.max(0, min - padding);
+    const domainMax = max + padding;
+    
+    return [domainMin, domainMax];
+  };
+
   // Get model data from comparison result
   const getModelData = (modelId: string): T.ComparisonModel | null => {
     if (!comparisonResult) return null;
@@ -511,7 +538,7 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                         </div>
                       </div>
                       <Badge variant="default" className="shrink-0 ml-2 text-xs">
-                        {model.weighted_score.toFixed(1)}점
+                        {Number(model.weighted_score || 0).toFixed(1)}점
                       </Badge>
                     </div>
 
@@ -520,12 +547,12 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                       <div className="p-2 bg-white/70 rounded-lg">
                         <p className="text-[10px] text-muted-foreground mb-0.5">{model.benchmark_scores.primary.name}</p>
                         <p className="text-xs sm:text-sm">{model.benchmark_scores.primary.score} 점</p>
-                        <p className="text-[10px] text-green-600">기여도: {model.benchmark_scores.primary.contribution.toFixed(1)}</p>
+                        <p className="text-[10px] text-green-600">기여도: {Number(model.benchmark_scores.primary.contribution || 0).toFixed(1)}</p>
                       </div>
                       <div className="p-2 bg-white/70 rounded-lg">
                         <p className="text-[10px] text-muted-foreground mb-0.5">{model.benchmark_scores.secondary.name}</p>
                         <p className="text-xs sm:text-sm">{model.benchmark_scores.secondary.score} 점</p>
-                        <p className="text-[10px] text-green-600">기여도: {model.benchmark_scores.secondary.contribution.toFixed(1)}</p>
+                        <p className="text-[10px] text-green-600">기여도: {Number(model.benchmark_scores.secondary.contribution || 0).toFixed(1)}</p>
                       </div>
                     </div>
 
@@ -649,15 +676,15 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                         </div>
                       </div>
                       <Badge variant="default" className="shrink-0 ml-2 text-xs">
-                        {model.weighted_score.toFixed(1)}점
+                        {Number(model.weighted_score || 0).toFixed(1)}점
                       </Badge>
                     </div>
                     <div className="flex flex-wrap gap-1.5 sm:gap-2">
                       <Badge variant="outline" className="text-xs bg-white">
-                        {model.benchmark_scores.primary.name}: {model.benchmark_scores.primary.score.toFixed(1)}
+                        {model.benchmark_scores.primary.name}: {Number(model.benchmark_scores.primary.score || 0).toFixed(1)}
                       </Badge>
                       <Badge variant="secondary" className="text-xs bg-white/50">
-                        {model.benchmark_scores.secondary.name}: {model.benchmark_scores.secondary.score.toFixed(1)}
+                        {model.benchmark_scores.secondary.name}: {Number(model.benchmark_scores.secondary.score || 0).toFixed(1)}
                       </Badge>
                     </div>
                   </div>
@@ -1306,7 +1333,7 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                 MMLU_PRO 벤치마크 기준 성능 발전
               </p>
               
-              {/* Series selector for benchmark chart */}
+              {/* Series selector for benchmark chart - Requirements 1.1, 1.2 */}
               <div className="mb-4">
                 <Label className="text-sm mb-2 block">시리즈 선택</Label>
                 <Select value={selectedSeries} onValueChange={setSelectedSeries}>
@@ -1314,11 +1341,17 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                     <SelectValue placeholder="시리즈 선택" />
                   </SelectTrigger>
                   <SelectContent>
-                    {['GPT', 'Claude'].map((series) => (
-                      <SelectItem key={series} value={series} className="text-sm">
-                        {series}
-                      </SelectItem>
-                    ))}
+                    {availableSeriesList.length === 0 ? (
+                      <div className="p-2 text-center text-sm text-muted-foreground">
+                        로딩 중...
+                      </div>
+                    ) : (
+                      availableSeriesList.map((series) => (
+                        <SelectItem key={series.series_name} value={series.series_name} className="text-sm">
+                          {series.series_name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1331,7 +1364,7 @@ export function ModelPage({ userData, onNavigate }: ModelPageProps) {
                     tick={false}
                     height={20}
                   />
-                  <YAxis domain={[70, 90]} tick={{ fontSize: 10 }} width={40} />
+                  <YAxis domain={calculateYAxisDomain(getBenchmarkData())} tick={{ fontSize: 10 }} width={40} />
                   <Tooltip 
                     contentStyle={{ fontSize: 11 }}
                     formatter={(value: any, name: string) => {

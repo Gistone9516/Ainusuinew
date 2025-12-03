@@ -89,11 +89,12 @@ export interface TaskClassification {
 }
 
 // ==================== 모델 추천 타입 ====================
+// Note: score and contribution can be string or number as API may return either type
 export interface BenchmarkScore {
   name: string;
-  score: number;
+  score: string | number;
   weight: number;
-  contribution: number;
+  contribution: string | number;
 }
 
 export interface BenchmarkScores {
@@ -106,12 +107,13 @@ export interface ModelPricing {
   output_price: number;
 }
 
+// Note: weighted_score can be string or number as API may return either type
 export interface RecommendedModel {
   rank: number;
   model_id: string;
   model_name: string;
   creator_name: string;
-  weighted_score: number;
+  weighted_score: string | number;
   benchmark_scores: BenchmarkScores;
   overall_score: number;
   pricing: ModelPricing;
@@ -369,13 +371,15 @@ export interface PaginatedModels {
 // ==================== 직업별 모델 추천 ====================
 
 // 벤치마크 점수 정보
+// Note: score can be string or number as API may return either type
 export interface BenchmarkScoreInfo {
   name: string;
-  score: number;
+  score: string | number;
   weight: number;
 }
 
 // 추천 모델 정보
+// Note: weighted_score can be string or number as API may return either type
 export interface JobRecommendation {
   rank: number;
   model_id: string;
@@ -383,7 +387,7 @@ export interface JobRecommendation {
   model_slug: string;
   creator_name: string;
   creator_slug: string;
-  weighted_score: number;
+  weighted_score: string | number;
   benchmark_scores: {
     primary: BenchmarkScoreInfo;
     secondary: BenchmarkScoreInfo;

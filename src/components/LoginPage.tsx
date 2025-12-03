@@ -63,7 +63,6 @@ export function LoginPage({ onLogin, onSignup }: LoginPageProps) {
     password: '',
     passwordConfirm: '',
     nickname: '',
-    job_category_id: null,
     agreeTerms: false,
     agreePrivacy: false,
   });
@@ -84,21 +83,7 @@ export function LoginPage({ onLogin, onSignup }: LoginPageProps) {
     available: boolean;
   }>({ checked: false, available: false });
 
-  // 직업 카테고리 목록
-  const [jobCategories] = useState([
-    { id: 1, name: '소프트웨어 개발' },
-    { id: 2, name: '데이터 과학' },
-    { id: 3, name: '디자인/UI-UX' },
-    { id: 4, name: '마케팅' },
-    { id: 5, name: '창작/콘텐츠' },
-    { id: 6, name: '분석/사무' },
-    { id: 7, name: '교육' },
-    { id: 8, name: '연구' },
-    { id: 9, name: '법률' },
-    { id: 10, name: '재무/회계' },
-    { id: 11, name: '의료/건강' },
-    { id: 12, name: '기타' },
-  ]);
+
 
   // ==================== useEffect 훅 ====================
   useEffect(() => {
@@ -221,11 +206,6 @@ export function LoginPage({ onLogin, onSignup }: LoginPageProps) {
       return;
     }
 
-    if (!registerForm.job_category_id) {
-      setPageState((prev) => ({ ...prev, error: '직업을 선택해주세요.' }));
-      return;
-    }
-
     if (!registerForm.agreeTerms || !registerForm.agreePrivacy) {
       setPageState((prev) => ({ ...prev, error: '약관에 동의해주세요.' }));
       return;
@@ -243,7 +223,6 @@ export function LoginPage({ onLogin, onSignup }: LoginPageProps) {
         email: registerForm.email,
         password: registerForm.password,
         nickname: registerForm.nickname,
-        job_category_id: registerForm.job_category_id,
       });
 
       // 회원가입 성공 → 온보딩 페이지로 이동
@@ -391,7 +370,6 @@ export function LoginPage({ onLogin, onSignup }: LoginPageProps) {
       validatePassword(registerForm.password).isValid &&
       validatePasswordConfirm(registerForm.password, registerForm.passwordConfirm) &&
       validateNickname(registerForm.nickname).isValid &&
-      registerForm.job_category_id !== null &&
       registerForm.agreeTerms &&
       registerForm.agreePrivacy &&
       emailCheckStatus.checked &&
@@ -600,24 +578,6 @@ export function LoginPage({ onLogin, onSignup }: LoginPageProps) {
                     maxLength={20}
                     required
                   />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="job-category">직업</Label>
-                  <select
-                    id="job-category"
-                    value={registerForm.job_category_id || ''}
-                    onChange={(e) => setRegisterForm({ ...registerForm, job_category_id: Number(e.target.value) })}
-                    className="w-full p-2 border rounded-md"
-                    required
-                  >
-                    <option value="">선택하세요</option>
-                    {jobCategories.map((job) => (
-                      <option key={job.id} value={job.id}>
-                        {job.name}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div className="space-y-2">
