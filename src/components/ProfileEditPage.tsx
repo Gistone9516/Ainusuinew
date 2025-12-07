@@ -1,76 +1,132 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Badge } from './ui/badge';
-import { ChevronLeft, User } from 'lucide-react';
-import type { UserData } from '../App';
+import { ChevronLeft, User, Lock, Loader2 } from 'lucide-react';
+import type { Page } from '../App';
+import { getExtendedUser, updateProfile, getJobCategories } from '@/lib/api/user';
+import { validateNickname, validateTagSelection } from '@/lib/utils/userHelpers';
+import { INTEREST_TAGS, GENDER_OPTIONS, type Gender, type JobCategoryData } from '@/types/user';
 
 interface ProfileEditPageProps {
-  userData: UserData;
-  onSave: (data: Partial<UserData>) => void;
+  onSave: () => void;
   onBack: () => void;
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: Page) => void;
 }
 
-const allTags = [
-  'LLM', '컴퓨터비전', '자연어처리', '머신러닝', '강화학습', '연합학습',
-  '모델경량화', '프롬프트엔지니어링', '에지AI', '윤리AI', 'AI보안', '개인화추천',
-  '콘텐츠생성', '이미지생성', '영상생성', '코드생성', '글쓰기지원', '번역',
-  '음성합성', '음성인식', '채팅봇', '감정분석', '데이터분석', '예측분석',
-  '자동화', '업무효율화', '의사결정지원', '마케팅자동화', '검색최적화', '가격결정',
-  'AI일자리', 'AI윤리', 'AI규제', 'AI성능', '모델출시', '오픈소스',
-  '의료진단', '교육지원', '비용절감', '기술트렌드',
-];
+export function ProfileEditPage({ onSave, onBack, onNavigate }: ProfileEditPageProps) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-const jobs = [
-  { value: 'tech', label: '기술/개발' },
-  { value: 'creative', label: '창작/콘텐츠' },
-  { value: 'analysis', label: '분석/사무' },
-  { value: 'healthcare', label: '의료/과학' },
-  { value: 'education', label: '교육' },
-  { value: 'business', label: '비즈니스' },
-  { value: 'manufacturing', label: '제조/건설' },
-  { value: 'service', label: '서비스' },
-  { value: 'startup', label: '창업/자영업' },
-  { value: 'agriculture', label: '농업/축산업' },
-  { value: 'fisheries', label: '어업/해상업' },
-  { value: 'student', label: '학생' },
-  { value: 'others', label: '기타' },
-];
+  // User data
+  const [nickname, setNickname] = useState('');
+  const [email, setEmail] = useState('');
+  const [gender, setGender] = useState<Gender | ''>('');
+  const [jobCategoryId, setJobCategoryId] = useState<number | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-const genders = [
-  { value: 'male', label: '남성' },
-  { value: 'female', label: '여성' },
-  { value: 'other', label: '기타' },
-  { value: 'prefer-not-to-say', label: '선택 안 함' },
-];
+  // Job categories from API
+  const [jobCategories, setJobCategories] = useState<JobCategoryData[]>([]);
 
-export function ProfileEditPage({ userData, onSave, onBack, onNavigate }: ProfileEditPageProps) {
-  const [username, setUsername] = useState(userData.username || '');
-  const [email, setEmail] = useState(userData.email || '');
-  const [gender, setGender] = useState(userData.gender || '');
-  const [job, setJob] = useState(userData.job || '');
-  const [selectedTags, setSelectedTags] = useState<string[]>(userData.tags || []);
+  // Errors
+  const [errors, setErrors] = useState<{
+    nickname?: string;
+    tags?: string;
+  }>({});
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      setLoading(true);
+      const [user, categories] = await Promise.all([
+        getExtendedUser(),
+        getJobCategories(),
+      ]);
+
+      setNickname(user.nickname);
+      setEmail(user.email);
+      setGender(user.gender || '');
+      setJobCategoryId(user.job_category_id || null);
+      setSelectedTags(user.interest_tags || []);
+      setJobCategories(categories);
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+      alert('사용자 정보를 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const toggleTag = (tag: string) => {
     if (selectedTags.includes(tag)) {
       setSelectedTags(selectedTags.filter((t) => t !== tag));
     } else {
+      // 최대 10개 제한
+      if (selectedTags.length >= 10) {
+        alert('관심 태그는 최대 10개까지 선택할 수 있습니다.');
+        return;
+      }
       setSelectedTags([...selectedTags, tag]);
     }
   };
 
-  const handleSave = () => {
-    onSave({
-      username,
-      email,
-      gender,
-      job,
-      tags: selectedTags,
-    });
+  const handleSave = async () => {
+    const newErrors: typeof errors = {};
+
+    // Validate nickname
+    const nicknameValidation = validateNickname(nickname);
+    if (!nicknameValidation.isValid) {
+      newErrors.nickname = nicknameValidation.error;
+    }
+
+    // Validate tags
+    const tagsValidation = validateTagSelection(selectedTags, 10);
+    if (!tagsValidation.isValid) {
+      newErrors.tags = tagsValidation.error;
+    }
+
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await updateProfile({
+        nickname,
+        gender: gender || undefined,
+        job_category_id: jobCategoryId || undefined,
+        interest_tags: selectedTags,
+      });
+      alert('프로필이 성공적으로 수정되었습니다.');
+      onSave();
+    } catch (error: any) {
+      console.error('Failed to update profile:', error);
+      alert('프로필 수정에 실패했습니다.');
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="max-w-2xl mx-auto pt-20">
+          <Card>
+            <CardContent className="p-12 text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-indigo-600" />
+              <p className="text-muted-foreground">프로필 정보를 불러오는 중...</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -93,23 +149,29 @@ export function ProfileEditPage({ userData, onSave, onBack, onNavigate }: Profil
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">아이디</Label>
+              <Label htmlFor="nickname">닉네임</Label>
               <Input
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="아이디를 입력하세요"
+                id="nickname"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="닉네임을 입력하세요"
               />
+              {errors.nickname && (
+                <p className="text-sm text-red-500">{errors.nickname}</p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">이메일</Label>
+              <Label htmlFor="email">이메일 (읽기 전용)</Label>
               <Input
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="이메일을 입력하세요"
+                disabled
+                className="bg-gray-100 cursor-not-allowed"
               />
+              <p className="text-xs text-muted-foreground">
+                이메일은 변경할 수 없습니다.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -118,7 +180,7 @@ export function ProfileEditPage({ userData, onSave, onBack, onNavigate }: Profil
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <User className="h-5 w-5 text-indigo-600" />
+              <Lock className="h-5 w-5 text-indigo-600" />
               <CardTitle>비밀번호 변경</CardTitle>
             </div>
             <CardDescription>
@@ -126,8 +188,8 @@ export function ProfileEditPage({ userData, onSave, onBack, onNavigate }: Profil
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full"
               onClick={() => onNavigate?.('password-change')}
             >
@@ -143,10 +205,10 @@ export function ProfileEditPage({ userData, onSave, onBack, onNavigate }: Profil
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3">
-              {genders.map((g) => (
+              {GENDER_OPTIONS.map((g) => (
                 <button
                   key={g.value}
-                  onClick={() => setGender(g.value)}
+                  onClick={() => setGender(g.value as Gender)}
                   className={`p-3 rounded-lg border-2 transition-all ${
                     gender === g.value
                       ? 'border-indigo-600 bg-indigo-50'
@@ -167,17 +229,17 @@ export function ProfileEditPage({ userData, onSave, onBack, onNavigate }: Profil
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3 max-h-60 overflow-y-auto">
-              {jobs.map((j) => (
+              {jobCategories.map((j) => (
                 <button
-                  key={j.value}
-                  onClick={() => setJob(j.value)}
+                  key={j.job_category_id}
+                  onClick={() => setJobCategoryId(j.job_category_id)}
                   className={`p-3 rounded-lg border-2 transition-all text-sm ${
-                    job === j.value
+                    jobCategoryId === j.job_category_id
                       ? 'border-indigo-600 bg-indigo-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  {j.label}
+                  {j.job_name}
                 </button>
               ))}
             </div>
@@ -188,14 +250,17 @@ export function ProfileEditPage({ userData, onSave, onBack, onNavigate }: Profil
         <Card>
           <CardHeader>
             <CardTitle>관심 태그</CardTitle>
-            <CardDescription>선택된 태그: {selectedTags.length}개</CardDescription>
+            <CardDescription>
+              선택된 태그: {selectedTags.length}/10개
+              {errors.tags && <span className="text-red-500 ml-2">{errors.tags}</span>}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="max-h-60 overflow-y-auto">
               <div className="flex flex-wrap gap-2">
-                {allTags.map((tag) => {
+                {INTEREST_TAGS.map((tag) => {
                   const isSelected = selectedTags.includes(tag);
-                  
+
                   return (
                     <button
                       key={tag}
@@ -205,6 +270,7 @@ export function ProfileEditPage({ userData, onSave, onBack, onNavigate }: Profil
                           ? 'bg-indigo-600 text-white'
                           : 'bg-gray-200 hover:bg-gray-300'
                       }`}
+                      disabled={!isSelected && selectedTags.length >= 10}
                     >
                       {tag}
                     </button>
@@ -217,10 +283,17 @@ export function ProfileEditPage({ userData, onSave, onBack, onNavigate }: Profil
 
         {/* Save Button */}
         <div className="space-y-2 pb-4">
-          <Button onClick={handleSave} className="w-full">
-            저장하기
+          <Button onClick={handleSave} className="w-full" disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                저장 중...
+              </>
+            ) : (
+              '저장하기'
+            )}
           </Button>
-          <Button onClick={onBack} variant="outline" className="w-full">
+          <Button onClick={onBack} variant="outline" className="w-full" disabled={saving}>
             취소
           </Button>
         </div>

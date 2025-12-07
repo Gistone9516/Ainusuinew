@@ -1,9 +1,16 @@
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
-import { ChevronLeft, Settings, Palette, Globe, Moon } from 'lucide-react';
+import { ChevronLeft, Palette, Globe } from 'lucide-react';
+import {
+  getAppSettings,
+  setTheme,
+  setLanguage as saveLanguage,
+  resetAppData,
+} from '@/lib/api/settings';
+import { LANGUAGE_OPTIONS } from '@/types/user';
 
 interface AppSettingsPageProps {
   onBack: () => void;
@@ -11,15 +18,47 @@ interface AppSettingsPageProps {
 
 export function AppSettingsPage({ onBack }: AppSettingsPageProps) {
   const [darkMode, setDarkMode] = useState(false);
-  const [autoUpdate, setAutoUpdate] = useState(true);
-  const [dataSync, setDataSync] = useState(true);
-  const [language, setLanguage] = useState('ko');
+  const [language, setLanguage] = useState<'ko' | 'en' | 'ja'>('ko');
 
-  const languages = [
-    { value: 'ko', label: '한국어' },
-    { value: 'en', label: 'English' },
-    { value: 'ja', label: '日本語' },
-  ];
+  useEffect(() => {
+    // 저장된 설정 불러오기
+    const settings = getAppSettings();
+    setDarkMode(settings.theme === 'dark');
+    setLanguage(settings.language);
+  }, []);
+
+  const handleDarkModeChange = (checked: boolean) => {
+    setDarkMode(checked);
+    setTheme(checked ? 'dark' : 'light');
+  };
+
+  const handleLanguageChange = (lang: 'ko' | 'en' | 'ja') => {
+    setLanguage(lang);
+    saveLanguage(lang);
+  };
+
+  const handleResetAppData = () => {
+    if (
+      confirm(
+        '앱 데이터를 초기화하시겠습니까?\n\n설정이 기본값으로 돌아가며, 토큰은 유지됩니다.'
+      )
+    ) {
+      resetAppData();
+      alert('앱 데이터가 초기화되었습니다.');
+      // 설정 다시 불러오기
+      const settings = getAppSettings();
+      setDarkMode(settings.theme === 'dark');
+      setLanguage(settings.language);
+    }
+  };
+
+  const handleClearCache = () => {
+    if (confirm('캐시를 삭제하시겠습니까?')) {
+      // 캐시 삭제 로직 (현재는 localStorage의 userCache만 삭제)
+      localStorage.removeItem('userCache');
+      alert('캐시가 삭제되었습니다.');
+    }
+  };
 
   return (
     <div className="min-h-screen p-4 bg-gray-50">
@@ -51,7 +90,7 @@ export function AppSettingsPage({ onBack }: AppSettingsPageProps) {
               <Switch
                 id="dark-mode"
                 checked={darkMode}
-                onCheckedChange={setDarkMode}
+                onCheckedChange={handleDarkModeChange}
               />
             </div>
           </CardContent>
@@ -67,16 +106,17 @@ export function AppSettingsPage({ onBack }: AppSettingsPageProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {languages.map((lang) => (
+              {LANGUAGE_OPTIONS.map((lang) => (
                 <button
                   key={lang.value}
-                  onClick={() => setLanguage(lang.value)}
+                  onClick={() => handleLanguageChange(lang.value)}
                   className={`w-full p-3 rounded-lg border-2 transition-all text-left ${
                     language === lang.value
                       ? 'border-indigo-600 bg-indigo-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
+                  <span className="mr-2">{lang.flag}</span>
                   {lang.label}
                 </button>
               ))}
@@ -84,39 +124,6 @@ export function AppSettingsPage({ onBack }: AppSettingsPageProps) {
           </CardContent>
         </Card>
 
-        {/* Data Settings */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-indigo-600" />
-              <CardTitle>데이터 설정</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="auto-update" className="text-base">자동 업데이트</Label>
-                <p className="text-sm text-muted-foreground">앱 자동 업데이트 허용</p>
-              </div>
-              <Switch
-                id="auto-update"
-                checked={autoUpdate}
-                onCheckedChange={setAutoUpdate}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="data-sync" className="text-base">데이터 동기화</Label>
-                <p className="text-sm text-muted-foreground">클라우드 데이터 동기화</p>
-              </div>
-              <Switch
-                id="data-sync"
-                checked={dataSync}
-                onCheckedChange={setDataSync}
-              />
-            </div>
-          </CardContent>
-        </Card>
 
         {/* App Info */}
         <Card>
@@ -137,10 +144,10 @@ export function AppSettingsPage({ onBack }: AppSettingsPageProps) {
 
         {/* Action Buttons */}
         <div className="space-y-2 pb-20">
-          <Button variant="outline" className="w-full">
+          <Button variant="outline" className="w-full" onClick={handleClearCache}>
             캐시 삭제
           </Button>
-          <Button variant="outline" className="w-full text-destructive hover:text-destructive">
+          <Button variant="outline" className="w-full text-destructive hover:text-destructive" onClick={handleResetAppData}>
             앱 데이터 초기화
           </Button>
         </div>

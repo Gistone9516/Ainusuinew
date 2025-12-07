@@ -1,0 +1,18 @@
+{
+  "appId": "com.ainus.app",
+  "appName": "Ainus",
+  "webDir": "build",
+  "server": {
+    "cleartext": true,
+    "allowNavigation": ["192.168.35.125:3000", "*.192.168.35.125"],
+    "androidScheme": "http"
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

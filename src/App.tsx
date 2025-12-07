@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { LoginPage } from './components/LoginPage';
-import { SignupPage } from './components/SignupPage';
 import { OnboardingGender } from './components/OnboardingGender';
 import { OnboardingJob } from './components/OnboardingJob';
 import { OnboardingTags } from './components/OnboardingTags';
@@ -21,13 +20,15 @@ import { NotificationSettingsPage } from './components/NotificationSettingsPage'
 import { NotificationListPage } from './components/NotificationListPage';
 import { BottomNavigation } from './components/BottomNavigation';
 
-export type Page = 'login' | 'signup' | 'onboarding-gender' | 'onboarding-job' | 'onboarding-tags' | 'home' | 'issue' | 'issue-detail' | 'community' | 'community-post-detail' | 'community-write' | 'model' | 'mypage' | 'profile-edit' | 'password-change' | 'app-settings' | 'my-posts' | 'my-comments' | 'notification-settings' | 'notifications';
+export type Page = 'login' | 'onboarding-gender' | 'onboarding-job' | 'onboarding-tags' | 'home' | 'issue' | 'issue-detail' | 'community' | 'community-post-detail' | 'community-write' | 'model' | 'mypage' | 'profile-edit' | 'password-change' | 'app-settings' | 'my-posts' | 'my-comments' | 'notification-settings' | 'notifications';
 
 export interface UserData {
   username?: string;
   email?: string;
   gender?: string;
   job?: string;
+  job_category_code?: string;
+  job_category_id?: number;
   tags?: string[];
 }
 
@@ -41,24 +42,19 @@ export default function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'login':
-        return <LoginPage onLogin={() => setCurrentPage('onboarding-gender')} onSignup={() => setCurrentPage('signup')} />;
-      case 'signup':
-        return <SignupPage onSignup={(data) => {
-          setUserData({ ...userData, ...data });
-          setCurrentPage('onboarding-gender');
-        }} onBack={() => setCurrentPage('login')} />;
+        return <LoginPage onLogin={() => setCurrentPage('home')} onSignup={() => setCurrentPage('onboarding-gender')} />;
       case 'onboarding-gender':
         return <OnboardingGender onNext={(gender) => {
           setUserData({ ...userData, gender });
           setCurrentPage('onboarding-job');
         }} />;
       case 'onboarding-job':
-        return <OnboardingJob onNext={(job) => {
-          setUserData({ ...userData, job });
+        return <OnboardingJob onNext={(job, jobCode) => {
+          setUserData({ ...userData, job, job_category_code: jobCode });
           setCurrentPage('onboarding-tags');
         }} onBack={() => setCurrentPage('onboarding-gender')} />;
       case 'onboarding-tags':
-        return <OnboardingTags userJob={userData.job || ''} onNext={(tags) => {
+        return <OnboardingTags userJob={userData.job_category_code || ''} onNext={(tags) => {
           setUserData({ ...userData, tags });
           setCurrentPage('home');
         }} onBack={() => setCurrentPage('onboarding-job')} />;
@@ -137,9 +133,7 @@ export default function App() {
         />;
       case 'profile-edit':
         return <ProfileEditPage 
-          userData={userData} 
-          onSave={(data) => {
-            setUserData({ ...userData, ...data });
+          onSave={() => {
             setCurrentPage('mypage');
           }}
           onBack={() => setCurrentPage('mypage')}
@@ -161,7 +155,7 @@ export default function App() {
       case 'notifications':
         return <NotificationListPage onBack={() => setCurrentPage('home')} />;
       default:
-        return <LoginPage onLogin={() => setCurrentPage('onboarding-gender')} onSignup={() => setCurrentPage('signup')} />;
+        return <LoginPage onLogin={() => setCurrentPage('home')} onSignup={() => setCurrentPage('onboarding-gender')} />;
     }
   };
 

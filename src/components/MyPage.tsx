@@ -1,8 +1,13 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { User, Settings, FileText, MessageSquare, Bell, ChevronRight, LogOut, UserX } from 'lucide-react';
+import { User, Settings, FileText, MessageSquare, Bell, ChevronRight, LogOut, UserX, Loader2 } from 'lucide-react';
 import type { UserData, Page } from '../App';
+import { getExtendedUser, getMyPostsCount, getMyCommentsCount, deleteAccount } from '@/lib/api/user';
+import { logout } from '@/lib/api/auth';
+import { formatJoinDate, getGenderLabel } from '@/lib/utils/userHelpers';
+import type { ExtendedUser } from '@/types/user';
 
 interface MyPageProps {
   userData: UserData;
@@ -11,6 +16,60 @@ interface MyPageProps {
 }
 
 export function MyPage({ userData, onLogout, onNavigate }: MyPageProps) {
+  const [user, setUser] = useState<ExtendedUser | null>(null);
+  const [postsCount, setPostsCount] = useState<number>(0);
+  const [commentsCount, setCommentsCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      setLoading(true);
+      const userData = await getExtendedUser();
+      setUser(userData);
+
+      // 게시글/댓글 수 로드
+      const [posts, comments] = await Promise.all([
+        getMyPostsCount(userData.user_id),
+        getMyCommentsCount(),
+      ]);
+      setPostsCount(posts);
+      setCommentsCount(comments);
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      onLogout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+      onLogout(); // 에러가 나도 로그아웃 처리
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!confirm('정말 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      return;
+    }
+
+    try {
+      await deleteAccount();
+      alert('회원 탈퇴가 완료되었습니다.');
+      onLogout();
+    } catch (error) {
+      console.error('Account deletion failed:', error);
+      alert('회원 탈퇴에 실패했습니다. 나중에 다시 시도해주세요.');
+    }
+  };
+
   const menuItems = [
     {
       icon: User,
@@ -28,14 +87,14 @@ export function MyPage({ userData, onLogout, onNavigate }: MyPageProps) {
       icon: FileText,
       title: '내 게시글',
       description: '작성한 게시글 확인',
-      badge: '12',
+      badge: postsCount > 0 ? postsCount.toString() : undefined,
       onClick: () => onNavigate('my-posts'),
     },
     {
       icon: MessageSquare,
       title: '내 댓글',
       description: '작성한 댓글 확인',
-      badge: '34',
+      badge: commentsCount > 0 ? commentsCount.toString() : undefined,
       onClick: () => onNavigate('my-comments'),
     },
     {
@@ -45,6 +104,14 @@ export function MyPage({ userData, onLogout, onNavigate }: MyPageProps) {
       onClick: () => onNavigate('notification-settings'),
     },
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-4 pb-20 bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-4 pb-20 bg-gray-50">
@@ -62,17 +129,22 @@ export function MyPage({ userData, onLogout, onNavigate }: MyPageProps) {
                 <User className="h-8 w-8 text-indigo-600" />
               </div>
               <div className="flex-1">
-                <h2 className="text-2xl mb-1">{userData.username || '사용자'}</h2>
-                <p className="text-indigo-100">{userData.email || 'user@example.com'}</p>
+                <h2 className="text-2xl mb-1">{user?.nickname || '사용자'}</h2>
+                <p className="text-indigo-100">{user?.email || 'user@example.com'}</p>
                 <div className="flex gap-2 mt-2">
-                  {userData.job && (
+                  {user?.job_category_name && (
                     <Badge variant="secondary" className="bg-white/20 text-white border-0">
-                      {userData.job}
+                      {user.job_category_name}
                     </Badge>
                   )}
-                  {userData.gender && (
+                  {user?.gender && (
                     <Badge variant="secondary" className="bg-white/20 text-white border-0">
-                      {userData.gender === 'male' ? '남성' : userData.gender === 'female' ? '여성' : '기타'}
+                      {getGenderLabel(user.gender)}
+                    </Badge>
+                  )}
+                  {user?.created_at && (
+                    <Badge variant="secondary" className="bg-white/20 text-white border-0">
+                      가입일: {formatJoinDate(user.created_at)}
                     </Badge>
                   )}
                 </div>
@@ -82,14 +154,14 @@ export function MyPage({ userData, onLogout, onNavigate }: MyPageProps) {
         </Card>
 
         {/* Interest Tags */}
-        {userData.tags && userData.tags.length > 0 && (
+        {user?.interest_tags && user.interest_tags.length > 0 && (
           <Card>
             <CardHeader className="pb-0">
               <CardTitle className="text-lg">관심 태그</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="flex flex-wrap gap-2">
-                {userData.tags.map((tag) => (
+                {user.interest_tags.map((tag) => (
                   <Badge key={tag} variant="secondary">
                     {tag}
                   </Badge>
@@ -133,7 +205,7 @@ export function MyPage({ userData, onLogout, onNavigate }: MyPageProps) {
           <Button
             variant="outline"
             className="w-full justify-start"
-            onClick={onLogout}
+            onClick={handleLogout}
           >
             <LogOut className="h-5 w-5 mr-2" />
             로그아웃
@@ -141,7 +213,7 @@ export function MyPage({ userData, onLogout, onNavigate }: MyPageProps) {
           <Button
             variant="ghost"
             className="w-full justify-start text-destructive hover:text-destructive"
-            onClick={() => confirm('정말 탈퇴하시겠습니까?') && onLogout()}
+            onClick={handleDeleteAccount}
           >
             <UserX className="h-5 w-5 mr-2" />
             회원 탈퇴

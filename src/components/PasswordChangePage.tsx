@@ -3,7 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { ChevronLeft, Lock, Eye, EyeOff } from 'lucide-react';
+import { ChevronLeft, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { changePassword } from '@/lib/api/auth';
+import { validatePassword, getPasswordStrength } from '@/lib/utils/userHelpers';
 
 interface PasswordChangePageProps {
   onBack: () => void;
@@ -17,23 +19,16 @@ export function PasswordChangePage({ onBack, onSave }: PasswordChangePageProps) 
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{
     currentPassword?: string;
     newPassword?: string;
     confirmPassword?: string;
   }>({});
 
-  const validatePassword = (password: string) => {
-    if (password.length < 8) {
-      return '비밀번호는 최소 8자 이상이어야 합니다.';
-    }
-    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
-      return '비밀번호는 영문과 숫자를 포함해야 합니다.';
-    }
-    return null;
-  };
+  const passwordStrength = newPassword ? getPasswordStrength(newPassword) : null;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const newErrors: typeof errors = {};
 
     // Validate current password
@@ -45,9 +40,9 @@ export function PasswordChangePage({ onBack, onSave }: PasswordChangePageProps) 
     if (!newPassword) {
       newErrors.newPassword = '새 비밀번호를 입력해주세요.';
     } else {
-      const passwordError = validatePassword(newPassword);
-      if (passwordError) {
-        newErrors.newPassword = passwordError;
+      const validation = validatePassword(newPassword);
+      if (!validation.isValid) {
+        newErrors.newPassword = validation.errors[0];
       }
     }
 
@@ -66,9 +61,26 @@ export function PasswordChangePage({ onBack, onSave }: PasswordChangePageProps) 
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      // Success
-      alert('비밀번호가 성공적으로 변경되었습니다.');
-      onSave();
+      try {
+        setLoading(true);
+        await changePassword({
+          currentPassword,
+          newPassword,
+        });
+        alert('비밀번호가 성공적으로 변경되었습니다.');
+        onSave();
+      } catch (error: any) {
+        console.error('Password change failed:', error);
+        const errorMessage = error.response?.data?.error?.message || '비밀번호 변경에 실패했습니다.';
+
+        if (errorMessage.includes('current password') || errorMessage.includes('Invalid credentials')) {
+          setErrors({ currentPassword: '현재 비밀번호가 올바르지 않습니다.' });
+        } else {
+          alert(errorMessage);
+        }
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -151,8 +163,36 @@ export function PasswordChangePage({ onBack, onSave }: PasswordChangePageProps) 
               {errors.newPassword && (
                 <p className="text-sm text-red-500">{errors.newPassword}</p>
               )}
+              {passwordStrength && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${
+                          passwordStrength.level === 'weak'
+                            ? 'bg-red-500 w-1/3'
+                            : passwordStrength.level === 'medium'
+                            ? 'bg-yellow-500 w-2/3'
+                            : 'bg-green-500 w-full'
+                        }`}
+                      />
+                    </div>
+                    <span className={`text-xs font-medium ${
+                      passwordStrength.level === 'weak'
+                        ? 'text-red-500'
+                        : passwordStrength.level === 'medium'
+                        ? 'text-yellow-500'
+                        : 'text-green-500'
+                    }`}>
+                      {passwordStrength.level === 'weak' && '약함'}
+                      {passwordStrength.level === 'medium' && '보통'}
+                      {passwordStrength.level === 'strong' && '강함'}
+                    </span>
+                  </div>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
-                영문, 숫자 포함 8자 이상
+                대소문자, 숫자, 특수문자 포함 8자 이상
               </p>
             </div>
 
@@ -204,10 +244,17 @@ export function PasswordChangePage({ onBack, onSave }: PasswordChangePageProps) 
 
         {/* Action Buttons */}
         <div className="space-y-2 pb-4">
-          <Button onClick={handleSubmit} className="w-full">
-            비밀번호 변경
+          <Button onClick={handleSubmit} className="w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                변경 중...
+              </>
+            ) : (
+              '비밀번호 변경'
+            )}
           </Button>
-          <Button onClick={onBack} variant="outline" className="w-full">
+          <Button onClick={onBack} variant="outline" className="w-full" disabled={loading}>
             취소
           </Button>
         </div>
